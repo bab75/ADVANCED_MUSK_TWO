@@ -1,0 +1,24 @@
+body {
+    font-family: Arial, sans-serif;
+}
+
+.nav-icon svg {
+    width: 20px;
+    height: 20px;
+    vertical-align: middle;
+    margin-right: 10px;
+}
+
+h1, h2, h3 {
+    color: #2c3e50;
+}
+
+.stButton>button {
+    background-color: #3498db;
+    color: white;
+    border-radius: 5px;
+}
+
+.stButton>button:hover {
+    background-color: #2980b9;
+}
