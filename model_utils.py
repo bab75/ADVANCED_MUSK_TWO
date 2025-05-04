@@ -50,24 +50,28 @@ def train_model(model_name, X_train, y_train, X_test, y_test):
 
 def tune_model(model_name, X_train, y_train, X_test, y_test, custom_params=None):
     """Tune a model with GridSearchCV for multi-target learning."""
-    model = get_model(model_name)
-    param_grid = custom_params or {}
-    grid_search = GridSearchCV(model, param_grid, cv=3, scoring="accuracy", n_jobs=-1)
-    grid_search.fit(X_train, y_train)
-    
-    best_model = grid_search.best_estimator_
-    y_pred = best_model.predict(X_test)
-    metrics = {}
-    for i, target in enumerate(y_train.columns):
-        metrics[target] = {
-            "accuracy": accuracy_score(y_test.iloc[:, i], y_pred[:, i]),
-            "precision": precision_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA", zero_division=0),
-            "recall": recall_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA", zero_division=0),
-            "f1": f1_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA", zero_division=0),
-            "roc_auc": roc_auc_score(y_test.iloc[:, i], best_model.predict_proba(X_test)[:, i, 1]),
-            "y_pred": y_pred[:, i]
-        }
-    return best_model, metrics, grid_search.best_params_
+    try:
+        model = get_model(model_name)
+        param_grid = custom_params or {}
+        # Use n_jobs=1 to avoid multiprocessing issues
+        grid_search = GridSearchCV(model, param_grid, cv=3, scoring="accuracy", n_jobs=1)
+        grid_search.fit(X_train, y_train)
+        
+        best_model = grid_search.best_estimator_
+        y_pred = best_model.predict(X_test)
+        metrics = {}
+        for i, target in enumerate(y_train.columns):
+            metrics[target] = {
+                "accuracy": accuracy_score(y_test.iloc[:, i], y_pred[:, i]),
+                "precision": precision_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA", zero_division=0),
+                "recall": recall_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA", zero_division=0),
+                "f1": f1_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA", zero_division=0),
+                "roc_auc": roc_auc_score(y_test.iloc[:, i], best_model.predict_proba(X_test)[:, i, 1]),
+                "y_pred": y_pred[:, i]
+            }
+        return best_model, metrics, grid_search.best_params_
+    except Exception as e:
+        raise ValueError(f"Error tuning {model_name}: {str(e)}")
 
 def get_model_explanation(model_name, X_test, model):
     """Generate model explanation using SHAP if available."""
