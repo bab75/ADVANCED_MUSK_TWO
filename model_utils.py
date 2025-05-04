@@ -39,49 +39,50 @@ def train_model(model_name, X_train, y_train, X_test, y_test):
     
     return model, metrics
 
-def tune_model(model_name, X_train, y_train, X_test, y_test):
-    param_grid = {}
-    if model_name == "Logistic Regression":
-        model = LogisticRegression(max_iter=1000, random_state=42)
-        param_grid = {
-            "C": [0.1, 1, 10],
-            "solver": ["lbfgs", "liblinear"]
-        }
-    elif model_name == "Random Forest":
-        model = RandomForestClassifier(random_state=42)
-        param_grid = {
-            "n_estimators": [100, 200],
-            "max_depth": [None, 10, 20],
-            "min_samples_split": [2, 5]
-        }
-    elif model_name == "Decision Tree":
-        model = DecisionTreeClassifier(random_state=42)
-        param_grid = {
-            "max_depth": [None, 10, 20],
-            "min_samples_split": [2, 5]
-        }
-    elif model_name == "SVM":
-        model = SVC(probability=True, random_state=42)
-        param_grid = {
-            "C": [0.1, 1, 10],
-            "kernel": ["rbf", "linear"]
-        }
-    elif model_name == "Gradient Boosting":
-        model = GradientBoostingClassifier(random_state=42)
-        param_grid = {
-            "n_estimators": [100, 200],
-            "learning_rate": [0.01, 0.1],
-            "max_depth": [3, 5]
-        }
-    elif model_name == "Neural Network":
-        model = MLPClassifier(max_iter=1000, random_state=42, solver='adam', early_stopping=True)
-        param_grid = {
-            "hidden_layer_sizes": [(50,), (100,), (50, 50)],
-            "alpha": [0.0001, 0.001],
-            "learning_rate": ["constant", "adaptive"]
-        }
-    else:
-        raise ValueError(f"Unknown model: {model_name}")
+def tune_model(model_name, X_train, y_train, X_test, y_test, custom_params=None):
+    param_grid = custom_params if custom_params else {}
+    if not param_grid:
+        if model_name == "Logistic Regression":
+            model = LogisticRegression(max_iter=1000, random_state=42)
+            param_grid = {
+                "C": [0.1, 1, 10],
+                "solver": ["lbfgs", "liblinear"]
+            }
+        elif model_name == "Random Forest":
+            model = RandomForestClassifier(random_state=42)
+            param_grid = {
+                "n_estimators": [100, 200],
+                "max_depth": [None, 10, 20],
+                "min_samples_split": [2, 5]
+            }
+        elif model_name == "Decision Tree":
+            model = DecisionTreeClassifier(random_state=42)
+            param_grid = {
+                "max_depth": [None, 10, 20],
+                "min_samples_split": [2, 5]
+            }
+        elif model_name == "SVM":
+            model = SVC(probability=True, random_state=42)
+            param_grid = {
+                "C": [0.1, 1, 10],
+                "kernel": ["rbf", "linear"]
+            }
+        elif model_name == "Gradient Boosting":
+            model = GradientBoostingClassifier(random_state=42)
+            param_grid = {
+                "n_estimators": [100, 200],
+                "learning_rate": [0.01, 0.1],
+                "max_depth": [3, 5]
+            }
+        elif model_name == "Neural Network":
+            model = MLPClassifier(max_iter=1000, random_state=42, solver='adam', early_stopping=True)
+            param_grid = {
+                "hidden_layer_sizes": [(50,), (100,), (50, 50)],
+                "alpha": [0.0001, 0.001],
+                "learning_rate": ["constant", "adaptive"]
+            }
+        else:
+            raise ValueError(f"Unknown model: {model_name}")
     
     grid_search = GridSearchCV(model, param_grid, cv=3, scoring="f1", n_jobs=-1)
     grid_search.fit(X_train, y_train)
