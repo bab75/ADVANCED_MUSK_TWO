@@ -16,6 +16,7 @@ import os
 import tempfile
 from data_generator import generate_historical_data, generate_current_year_data
 from model_utils import train_model, tune_model, get_model_explanation, plot_confusion_matrix, plot_feature_importance
+import plotly.io as pio
 
 # Set page config
 st.set_page_config(page_title="Chronic Absenteeism Prediction", layout="wide")
@@ -59,8 +60,8 @@ if 'page' not in st.session_state:
     st.session_state.page = "📝 Data Configuration"
 if 'compare_models' not in st.session_state:
     st.session_state.compare_models = []
-if 'dropoff_group_by' not in st.session_state:
-    st.session_state.dropoff_group_by = None
+if 'selected_group_by' not in st.session_state:
+    st.session_state.selected_group_by = None
 
 # Sidebar navigation with radio buttons
 st.sidebar.title("Navigation")
@@ -604,7 +605,6 @@ elif st.session_state.page == "📊 Results":
                     historical_ids=historical_data, id_length=id_length, dropoff_percent=dropoff_percent,
                     include_graduates=include_graduates
                 )
-                st.session_state.dropoff_group_by = None  # Reset group-by selection
                 st.success("Current year data generated successfully!")
                 st.subheader("Data Preview")
                 st.dataframe(st.session_state.current_data.head(10))
@@ -622,7 +622,6 @@ elif st.session_state.page == "📊 Results":
         if uploaded_file:
             try:
                 st.session_state.current_data = pd.read_csv(uploaded_file)
-                st.session_state.dropoff_group_by = None  # Reset group-by selection
                 st.success("Data uploaded successfully!")
                 st.subheader("Data Preview")
                 st.dataframe(st.session_state.current_data.head(10))
@@ -641,14 +640,14 @@ elif st.session_state.page == "📊 Results":
         features = [f for f, enabled in feature_toggles.items() if enabled]
         
         group_by_options = [col for col in available_features if st.session_state.current_data[col].dtype == "object" or col == "Grade"]
+        group_by_options += [f["name"] for f in st.session_state.current_custom_fields if f["name"] in st.session_state.current_data.columns]
         group_by_feature = st.selectbox(
             "Group Drop Off % By",
-            [""] + group_by_options,
-            index=group_by_options.index(st.session_state.dropoff_group_by) + 1 if st.session_state.dropoff_group_by in group_by_options else 0,
-            help="Select a feature to group students and calculate the percentage of those predicted as chronically absent (CA). Changing this does not re-run predictions, only updates the visualization."
+            group_by_options,
+            index=group_by_options.index(st.session_state.selected_group_by) if st.session_state.selected_group_by in group_by_options else 0,
+            help="Select a feature to visualize the percentage of students predicted as chronically absent (CA) for each group. This uses existing predictions and does not require re-running the model."
         )
-        if group_by_feature == "":
-            group_by_feature = None
+        st.session_state.selected_group_by = group_by_feature
         
         if st.button("Predict"):
             try:
@@ -667,18 +666,19 @@ elif st.session_state.page == "📊 Results":
                 prediction_data["CA_Prediction"] = predictions
                 prediction_data["CA_Probability"] = probabilities
                 
-                # Calculate Drop Off % based on default group-by (Grade if available, else first categorical feature)
-                default_group_by = "Grade" if "Grade" in group_by_options else group_by_options[0] if group_by_options else None
-                if default_group_by:
-                    dropoff_data = prediction_data.groupby(default_group_by)["CA_Prediction"].value_counts(normalize=True).unstack().fillna(0)
+                # Calculate Drop Off % for the selected group
+                if group_by_feature:
+                    dropoff_data = prediction_data.groupby(group_by_feature)["CA_Prediction"].value_counts(normalize=True).unstack().fillna(0)
                     if "CA" in dropoff_data.columns:
                         dropoff_data["Drop_Off_Percent"] = dropoff_data["CA"] * 100
-                        dropoff_data = dropoff_data.reset_index()[[default_group_by, "Drop_Off_Percent"]]
-                        prediction_data = prediction_data.merge(dropoff_data, on=default_group_by, how="left")
+                        dropoff_data = dropoff_data[["Drop_Off_Percent"]].reset_index()
+                        prediction_data = prediction_data.merge(
+                            dropoff_data[[group_by_feature, "Drop_Off_Percent"]],
+                            on=group_by_feature,
+                            how="left"
+                        )
                     else:
                         prediction_data["Drop_Off_Percent"] = 0.0
-                else:
-                    prediction_data["Drop_Off_Percent"] = 0.0
                 
                 if use_historical_ids and "Student_ID" in prediction_data.columns and st.session_state.data is not None:
                     if "Student_ID" not in st.session_state.data.columns:
@@ -689,7 +689,6 @@ elif st.session_state.page == "📊 Results":
                     )
                 
                 st.session_state.current_data = prediction_data
-                st.session_state.dropoff_group_by = default_group_by
                 
                 st.subheader("Prediction Results")
                 st.dataframe(st.session_state.current_data)
@@ -723,72 +722,31 @@ elif st.session_state.page == "📊 Results":
                 fig.update_traces(hovertemplate="Grade: %{y}<br>Prediction: %{x}<br>Count: %{z}")
                 st.plotly_chart(fig)
                 
+                if group_by_feature:
+                    dropoff_data = st.session_state.current_data.groupby(group_by_feature)["CA_Prediction"].value_counts(normalize=True).unstack().fillna(0)
+                    if "CA" in dropoff_data.columns:
+                        dropoff_data["Drop_Off_Percent"] = dropoff_data["CA"] * 100
+                        dropoff_data = dropoff_data[["Drop_Off_Percent"]].reset_index()
+                        fig = px.pie(
+                            dropoff_data,
+                            values="Drop_Off_Percent",
+                            names=group_by_feature,
+                            title=f"Drop Off Percentage by {group_by_feature}",
+                            hole=0.4,  # Make it a donut chart
+                            color_discrete_sequence=px.colors.sequential.Reds
+                        )
+                        fig.update_traces(
+                            hovertemplate=f"{group_by_feature}: %{{label}}<br>Drop Off %: %{{value:.2f}}%",
+                            textinfo="percent+label"
+                        )
+                        st.plotly_chart(fig)
+                    else:
+                        st.warning(f"No students predicted as CA for grouping by {group_by_feature}.")
+                
                 csv = st.session_state.current_data.to_csv(index=False)
                 st.download_button("Download Predictions", csv, "predictions.csv", "text/csv")
             except Exception as e:
                 st.error(f"Error running predictions: {str(e)}")
-        
-        # Display Drop Off % Pie Chart
-        if group_by_feature and "CA_Prediction" in st.session_state.current_data.columns:
-            st.session_state.dropoff_group_by = group_by_feature
-            dropoff_data = st.session_state.current_data.groupby(group_by_feature)["CA_Prediction"].value_counts(normalize=True).unstack().fillna(0)
-            if "CA" in dropoff_data.columns:
-                dropoff_data["Drop_Off_Percent"] = dropoff_data["CA"] * 100
-                dropoff_data = dropoff_data.reset_index()[[group_by_feature, "Drop_Off_Percent"]]
-                
-                # Update Drop_Off_Percent column in current_data
-                st.session_state.current_data = st.session_state.current_data.drop(columns=["Drop_Off_Percent"], errors="ignore")
-                st.session_state.current_data = st.session_state.current_data.merge(dropoff_data, on=group_by_feature, how="left")
-                
-                # Generate Pie Chart
-                fig = px.pie(
-                    dropoff_data,
-                    values="Drop_Off_Percent",
-                    names=group_by_feature,
-                    title=f"Drop Off Percentage by {group_by_feature}",
-                    color_discrete_sequence=px.colors.sequential.Reds
-                )
-                fig.update_traces(
-                    hovertemplate=f"{group_by_feature}: %{{label}}<br>Drop Off %: %{{value:.2f}}%",
-                    textinfo="percent+label",
-                    textposition="inside"
-                )
-                st.plotly_chart(fig)
-                
-                # Update data preview with new Drop_Off_Percent
-                st.subheader("Updated Data Preview")
-                st.dataframe(st.session_state.current_data.head(10))
-                
-                csv = st.session_state.current_data.to_csv(index=False)
-                st.download_button("Download Updated Predictions", csv, "updated_predictions.csv", "text/csv")
-            else:
-                st.warning(f"No students predicted as CA for grouping by {group_by_feature}.")
-        
-        # Custom Field Analysis
-        st.subheader("Custom Field Analysis")
-        custom_field_names = [f["name"] for f in st.session_state.current_custom_fields if f["name"]]
-        if custom_field_names:
-            selected_custom_fields = st.multiselect("Select Custom Fields to Analyze", custom_field_names, default=custom_field_names)
-            for field in selected_custom_fields:
-                if field in st.session_state.current_data.columns:
-                    dropoff_data = st.session_state.current_data.groupby(field)["CA_Prediction"].value_counts(normalize=True).unstack().fillna(0)
-                    if "CA" in dropoff_data.columns:
-                        dropoff_data["Drop_Off_Percent"] = dropoff_data["CA"] * 100
-                        fig = px.bar(
-                            dropoff_data.reset_index(),
-                            x=field,
-                            y="Drop_Off_Percent",
-                            title=f"Drop Off Percentage by {field}",
-                            labels={"Drop_Off_Percent": "Drop Off Percentage (%)"},
-                            color="Drop_Off_Percent",
-                            color_continuous_scale="Reds"
-                        )
-                        fig.update_traces(hovertemplate=f"{field}: %{{x}}<br>Drop Off %: %{{y:.2f}}%")
-                        st.plotly_chart(fig)
-                    else:
-                        st.warning(f"No students predicted as CA for custom field {field}.")
-        else:
-            st.info("No custom fields defined. Add custom fields in the 'Generate Current Year Data' section.")
         
         st.subheader("Single Student Analysis")
         if "CA_Prediction" in st.session_state.current_data.columns:
@@ -998,5 +956,120 @@ elif st.session_state.page == "📚 Documentation":
             st.info("Train models to enable AI-powered pattern recognition.")
         
         st.header("Group Analysis & Comparisons")
-        st.write("**Filter Students**")
-        filterable_features = ["Grade",
+        st.write("""
+        **Purpose of Analysis**: Use the dropdown to visualize Drop Off % for each value of a selected feature (e.g., Grade, Gender, or custom fields like Extracurricular) in the current-year data. Optional filters allow you to subset historical data for deeper analysis of attendance trends.
+        """)
+        
+        # Dropdown for selecting field to visualize Drop Off %
+        if st.session_state.current_data is not None and "CA_Prediction" in st.session_state.current_data.columns:
+            group_by_options = [col for col in st.session_state.current_data.columns if st.session_state.current_data[col].dtype == "object" or col == "Grade"]
+            group_by_options += [f["name"] for f in st.session_state.current_custom_fields if f["name"] in st.session_state.current_data.columns]
+            group_by_field = st.selectbox("Visualize Drop Off % By", group_by_options, key="group_analysis_field")
+            
+            if group_by_field:
+                dropoff_data = st.session_state.current_data.groupby(group_by_field)["CA_Prediction"].value_counts(normalize=True).unstack().fillna(0)
+                if "CA" in dropoff_data.columns:
+                    dropoff_data["Drop_Off_Percent"] = dropoff_data["CA"] * 100
+                    dropoff_data = dropoff_data[["Drop_Off_Percent"]].reset_index()
+                    fig = px.bar(
+                        dropoff_data,
+                        x=group_by_field,
+                        y="Drop_Off_Percent",
+                        title=f"Drop Off Percentage by {group_by_field}",
+                        labels={"Drop_Off_Percent": "Drop Off Percentage (%)"},
+                        color="Drop_Off_Percent",
+                        color_continuous_scale="Reds"
+                    )
+                    fig.update_traces(hovertemplate=f"{group_by_field}: %{{x}}<br>Drop Off %: %{{y:.2f}}%")
+                    st.plotly_chart(fig)
+                else:
+                    st.warning(f"No students predicted as CA for grouping by {group_by_field}.")
+        
+        # Optional filters for historical data
+        with st.expander("Advanced Filters for Historical Data", expanded=False):
+            st.write("Filter historical data to analyze specific student cohorts:")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                filter_grade = st.multiselect("Filter by Grade", sorted(st.session_state.data["Grade"].unique()), key="filter_grade")
+                filter_gender = st.multiselect("Filter by Gender", st.session_state.data["Gender"].unique(), key="filter_gender")
+            with col2:
+                filter_school = st.multiselect("Filter by School", st.session_state.data["School"].unique(), key="filter_school")
+                filter_meal = st.multiselect("Filter by Meal Code", st.session_state.data["Meal_Code"].unique(), key="filter_meal")
+            with col3:
+                filter_transport = st.multiselect("Filter by Transportation", st.session_state.data["Transportation"].unique(), key="filter_transport")
+            
+            filtered_data = st.session_state.data
+            if filter_grade:
+                filtered_data = filtered_data[filtered_data["Grade"].isin(filter_grade)]
+            if filter_gender:
+                filtered_data = filtered_data[filtered_data["Gender"].isin(filter_gender)]
+            if filter_school:
+                filtered_data = filtered_data[filtered_data["School"].isin(filter_school)]
+            if filter_meal:
+                filtered_data = filtered_data[filtered_data["Meal_Code"].isin(filter_meal)]
+            if filter_transport:
+                filtered_data = filtered_data[filtered_data["Transportation"].isin(filter_transport)]
+            
+            st.write("**Attendance Trends by Group**")
+            if not filtered_data.empty:
+                group_by = st.selectbox("Group By", ["Grade", "Gender", "School", "Meal_Code", "Transportation"], key="historical_group_by")
+                trend_data = filtered_data.groupby(group_by)["Attendance_Percentage"].mean().reset_index()
+                fig = px.bar(trend_data, x=group_by, y="Attendance_Percentage", title=f"Average Attendance by {group_by}")
+                st.plotly_chart(fig)
+                
+                fig = px.box(filtered_data, x=group_by, y="Attendance_Percentage", title=f"Attendance Distribution by {group_by}")
+                st.plotly_chart(fig)
+        
+        st.subheader("Advanced Attendance Visualizations")
+        if not high_risk.empty:
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                if st.session_state.current_data is not None:
+                    hist_trend = high_risk.groupby("Grade")["Attendance_Percentage"].mean().reset_index()
+                    hist_trend["Dataset"] = "Historical"
+                    curr_trend = st.session_state.current_data.groupby("Grade")["Attendance_Percentage"].mean().reset_index()
+                    curr_trend["Dataset"] = "Current Year"
+                    combined_trend = pd.concat([hist_trend, curr_trend], ignore_index=True)
+                    
+                    plt.figure(figsize=(10, 6))
+                    sns.barplot(data=combined_trend, x="Grade", y="Attendance_Percentage", hue="Dataset", palette="Blues")
+                    plt.title("Average Attendance by Grade: Historical vs. Current Year")
+                    plt.xlabel("Grade")
+                    plt.ylabel("Average Attendance (%)")
+                    plt.legend(title="Dataset")
+                    bar_plot_path = os.path.join(tmpdirname, "attendance_bar.png")
+                    plt.savefig(bar_plot_path, bbox_inches="tight")
+                    plt.close()
+                    st.image(bar_plot_path, caption="Grouped Bar Plot of Average Attendance by Grade")
+                
+                plt.figure(figsize=(10, 6))
+                sns.violinplot(data=high_risk, x="Grade", y="Attendance_Percentage", palette="Blues")
+                plt.title("Attendance Distribution by Grade (Historical Data)")
+                plt.xlabel("Grade")
+                plt.ylabel("Attendance Percentage (%)")
+                violin_plot_path = os.path.join(tmpdirname, "attendance_violin.png")
+                plt.savefig(violin_plot_path, bbox_inches="tight")
+                plt.close()
+                st.image(violin_plot_path, caption="Violin Plot of Attendance Distribution by Grade")
+        
+        st.header("Intervention Recommendations")
+        if not high_risk.empty:
+            with st.expander("Why Historical Data?", expanded=False):
+                st.markdown("""
+                **Why Historical Data?**
+
+                Historical data for high-risk students (CA Status = CA) helps identify patterns and risk factors. Key features like attendance, academic performance, suspensions, and transportation reveal characteristics:
+                - Low attendance indicates chronic absence.
+                - Poor academic performance may show disengagement.
+                - Suspensions suggest behavioral challenges.
+                - Transportation issues may limit access.
+
+                These insights inform targeted interventions like tutoring, counseling, or transportation support.
+                """)
+            
+            st.write("High-risk students (CA Status = CA):")
+            st.dataframe(high_risk[["Student_ID", "Attendance_Percentage", "Academic_Performance", "Suspensions", "Transportation"]])
+            st.write("Recommended Actions:")
+            st.write("- **Tutoring Programs**: For low academic performance.")
+            st.write("- **Counseling Services**: For high absence rates or suspensions.")
+            st.write("- **Parental Engagement**: Contact families of high-risk students.")
+            st.write("- **Transportation Support**: Assist students with unreliable transportation.")
