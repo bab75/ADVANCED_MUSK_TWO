@@ -13,11 +13,33 @@ def safe_randrange(start, stop):
         return start
     return random.randrange(start, stop)
 
+def apply_drop_off_rules(student_data, drop_off_rules):
+    """
+    Apply drop-off rules to determine Drop_Off status.
+    Rules include attendance percentage range and feature conditions.
+    Returns 'Y' if all conditions are met and CA_Status='CA', else 'N'.
+    """
+    if not drop_off_rules or not student_data["CA_Status"] == "CA":
+        return "Y" if student_data["CA_Status"] == "CA" else "N"
+    
+    attendance = student_data["Attendance_Percentage"]
+    attendance_min = drop_off_rules.get("attendance_min", 0)
+    attendance_max = drop_off_rules.get("attendance_max", 100)
+    
+    if not (attendance_min <= attendance <= attendance_max):
+        return "N"
+    
+    for feature, values in drop_off_rules.get("features", {}).items():
+        if feature in student_data and student_data[feature] not in values:
+            return "N"
+    
+    return "Y"
+
 def generate_historical_data(
     num_students, year_start, year_end, school_prefix, num_schools,
     grades, gender_dist, meal_codes, academic_perf, transportation,
     suspensions_range, present_days_range, absent_days_range, total_days,
-    custom_fields, id_length, dropoff_percent
+    custom_fields, id_length, dropoff_percent, drop_off_rules=None
 ):
     years = list(range(year_start, year_end + 1))
     schools = [f"{school_prefix}{i:03d}" for i in range(1, num_schools + 1)]
@@ -25,7 +47,7 @@ def generate_historical_data(
     gender_probs = [p / 100 for p in gender_dist]
     
     data = []
-    student_ids = [f"{'H' + str(i).zfill(id_length - 1)}" for i in range(1, num_students + 1)]
+    student_ids = [f"{'S' + str(i).zfill(id_length - 1)}" for i in range(1, num_students + 1)]
     
     for student_id in student_ids:
         for year in years:
@@ -50,7 +72,6 @@ def generate_historical_data(
             
             ca_threshold = (total_days * (100 - dropoff_percent)) / 100
             ca_status = "CA" if present_days < ca_threshold else "Non-CA"
-            drop_off = "Y" if ca_status == "CA" else "N"
             
             student_data = {
                 "Student_ID": student_id,
@@ -65,14 +86,14 @@ def generate_historical_data(
                 "Present_Days": present_days,
                 "Absent_Days": absent_days,
                 "Attendance_Percentage": attendance_percentage,
-                "CA_Status": ca_status,
-                "Drop_Off": drop_off
+                "CA_Status": ca_status
             }
             
             for field_name, field_values in custom_fields:
                 values = [v.strip() for v in field_values.split(",")]
                 student_data[field_name] = random.choice(values)
             
+            student_data["Drop_Off"] = apply_drop_off_rules(student_data, drop_off_rules)
             data.append(student_data)
     
     df = pd.DataFrame(data)
@@ -83,7 +104,8 @@ def generate_current_year_data(
     num_students, school_prefix, num_schools, grades, gender_dist,
     meal_codes, academic_perf, transportation, suspensions_range,
     present_days_range, absent_days_range, total_days, custom_fields,
-    historical_ids=None, id_length=5, dropoff_percent=20, include_graduates=False
+    historical_ids=None, id_length=5, dropoff_percent=20, include_graduates=False,
+    drop_off_rules=None
 ):
     schools = [f"{school_prefix}{i:03d}" for i in range(1, num_schools + 1)]
     genders = ["Male", "Female", "Other"]
@@ -103,10 +125,10 @@ def generate_current_year_data(
         if len(student_ids) > num_students:
             student_ids = random.sample(student_ids, num_students)
         elif len(student_ids) < num_students:
-            additional_ids = [f"{'C' + str(i).zfill(id_length - 1)}" for i in range(len(student_ids) + 1, num_students + 1)]
+            additional_ids = [f"{'S' + str(i).zfill(id_length - 1)}" for i in range(len(student_ids) + 1, num_students + 1)]
             student_ids.extend(additional_ids)
     else:
-        student_ids = [f"{'C' + str(i).zfill(id_length - 1)}" for i in range(1, num_students + 1)]
+        student_ids = [f"{'S' + str(i).zfill(id_length - 1)}" for i in range(1, num_students + 1)]
     
     for student_id in student_ids:
         grade = random.choice(grades)
@@ -134,7 +156,6 @@ def generate_current_year_data(
         
         ca_threshold = (total_days * (100 - dropoff_percent)) / 100
         ca_status = "CA" if present_days < ca_threshold else "Non-CA"
-        drop_off = "Y" if ca_status == "CA" else "N"
         
         student_data = {
             "Student_ID": student_id,
@@ -149,14 +170,14 @@ def generate_current_year_data(
             "Present_Days": present_days,
             "Absent_Days": absent_days,
             "Attendance_Percentage": attendance_percentage,
-            "CA_Status": ca_status,
-            "Drop_Off": drop_off
+            "CA_Status": ca_status
         }
         
         for field_name, field_values in custom_fields:
             values = [v.strip() for v in field_values.split(",")]
             student_data[field_name] = random.choice(values)
         
+        student_data["Drop_Off"] = apply_drop_off_rules(student_data, drop_off_rules)
         data.append(student_data)
     
     df = pd.DataFrame(data)
