@@ -162,6 +162,90 @@ if st.session_state.page == "📝 Data Configuration":
             st.download_button("Download Historical Data", csv, "historical_data.csv", "text/csv")
         except Exception as e:
             st.error(f"Error generating data: {str(e)}")
+
+# Page 1: Data Configuration
+if st.session_state.page == "📝 Data Configuration":
+    st.markdown("""
+    <h1>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 30px; height: 30px; vertical-align: middle; margin-right: 10px;">
+            <path d="M3 3h18v18H3V3zm2 2v14h14V5H5zm2 2h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/>
+        </svg>
+        📝 Data Configuration
+    </h1>
+    """, unsafe_allow_html=True)
+    
+    st.header("Generate Historical Data")
+    num_students = st.slider("Number of Students", 100, 5000, 1000)
+    year_start, year_end = st.slider("Academic Years", 2020, 2025, (2020, 2024), step=1)
+    school_prefix = st.text_input("School Prefix (e.g., 10U)", "10U")
+    num_schools = st.number_input("Number of Schools", 1, 10, 3)
+    
+    grades = st.multiselect("Grades", list(range(1, 13)), default=[1, 2, 3, 4, 5,6, 7, 8, 9, 10, 11, 12])
+    
+    st.subheader("Gender Distribution (%)")
+    male_dist = st.slider("Male (%)", 0, 100, 40, step=5)
+    female_dist = st.slider("Female (%)", 0, 100, 40, step=5)
+    other_dist = st.slider("Other (%)", 0, 100, 20, step=5)
+    
+    total_dist = male_dist + female_dist + other_dist
+    if total_dist != 100:
+        st.error(f"Gender distribution must sum to 100%. Current total: {total_dist}%")
+        gender_dist = None
+    else:
+        gender_dist = [male_dist, female_dist, other_dist]
+    
+    meal_codes = st.multiselect("Meal Codes", ["Free", "Reduced", "Paid"], default=["Free", "Reduced", "Paid"])
+    academic_perf = st.slider("Academic Performance Range (%)", 1, 100, (40, 90))
+    
+    transportation = st.multiselect("Transportation Options", ["Bus", "Walk", "Car"], default=["Bus", "Walk"])
+    suspensions_range = st.slider("Suspensions Range (per year)", 0, 10, (0, 3))
+    
+    st.subheader("Attendance Data")
+    total_days = 180
+    st.write(f"Total School Days: {total_days}")
+    present_days_range = st.slider("Present Days Range", 0, total_days, (100, total_days))
+    absent_days_range = st.slider("Absent Days Range", 0, total_days, (0, 80))
+    
+    if present_days_range[0] + absent_days_range[1] > total_days or present_days_range[1] + absent_days_range[0] < total_days:
+        st.error(f"Present and Absent days ranges must allow for total days to sum to {total_days}.")
+        attendance_valid = False
+    else:
+        attendance_valid = True
+    
+    st.subheader("Custom Fields")
+    if st.button("Add Custom Field"):
+        st.session_state.custom_fields.append({"name": "", "values": ""})
+    
+    for i, field in enumerate(st.session_state.custom_fields):
+        col1, col2, col3 = st.columns([3, 3, 1])
+        with col1:
+            field["name"] = st.text_input(f"Custom Field {i+1} Name", key=f"name_{i}")
+        with col2:
+            field["values"] = st.text_input(f"Custom Field {i+1} Values (comma-separated)", key=f"values_{i}")
+        with col3:
+            if st.button("Remove", key=f"remove_{i}"):
+                st.session_state.custom_fields.pop(i)
+                st.experimental_rerun()
+    
+    if st.button("Generate Historical Data") and gender_dist is not None and attendance_valid:
+        try:
+            st.session_state.patterns = []
+            custom_fields = [(f["name"], f["values"]) for f in st.session_state.custom_fields if f["name"] and f["values"]]
+            data = generate_historical_data(
+                num_students, year_start, year_end, school_prefix, num_schools,
+                grades, gender_dist, meal_codes, academic_perf, transportation,
+                suspensions_range, present_days_range, absent_days_range, total_days, custom_fields
+            )
+            st.session_state.data = data
+            st.success("Data generated successfully!")
+            
+            st.subheader("Data Preview")
+            st.dataframe(data.head(10))
+            
+            csv = data.to_csv(index=False)
+            st.download_button("Download Historical Data", csv, "historical_data.csv", "text/csv")
+        except Exception as e:
+            st.error(f"Error generating data: {str(e)}")
             
 # Page 2: Model Training
 elif st.session_state.page == "🤖 Model Training":
