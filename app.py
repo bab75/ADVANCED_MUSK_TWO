@@ -159,42 +159,51 @@ if st.session_state.page == "📝 Data Configuration":
     other_dist = st.slider("Other (%)", 0, 100, 20, step=5)
     
     total_dist = male_dist + female_dist + other_dist
-    if total_dist != 100:
-        st.error(f"Gender distribution must sum to 100%. Current total: {total_dist}%")
-        gender_dist = None
-    else:
-        gender_dist = [male_dist, female_dist, other_dist]
+    gender_dist_valid = total_dist == 100
+    if not gender_dist_valid:
+        st.warning(f"Gender distribution must sum to 100%. Current total: {total_dist}%")
+    gender_dist = [male_dist, female_dist, other_dist] if gender_dist_valid else None
     
     meal_codes = st.multiselect("Meal Codes", ["Free", "Reduced", "Paid"], default=["Free", "Reduced", "Paid"])
     academic_perf = st.slider("Academic Performance Range (%)", 1, 100, (40, 90))
     academic_perf_valid = academic_perf[0] < academic_perf[1]
+    if not academic_perf_valid:
+        st.warning("Academic Performance min must be less than max.")
     
     transportation = st.multiselect("Transportation Options", ["Bus", "Walk", "Car"], default=["Bus", "Walk"])
     suspensions_range = st.slider("Suspensions Range (per year)", 0, 10, (0, 3))
     suspensions_valid = suspensions_range[0] <= suspensions_range[1]
+    if not suspensions_valid:
+        st.warning("Suspensions min must be less than or equal to max.")
     
     st.subheader("Attendance Data")
     total_days = 180
     st.write(f"Total School Days: {total_days}")
-    present_days_range = st.slider("Present Days Range", 0, total_days, (100, 180))
+    present_days_range = st.slider("Present Days Range", 0, total_days, (120, 180))
     present_days_valid = present_days_range[0] < present_days_range[1]
+    if not present_days_valid:
+        st.warning("Present Days min must be less than max.")
     
     max_absent_days = total_days - present_days_range[0]
     if max_absent_days <= 0:
         max_absent_days = 1
+        st.warning("Max absent days must be greater than 0. Adjust Present Days Range.")
     absent_days_range = st.slider(
         "Absent Days Range",
-        0, max_absent_days, (0, min(80, max_absent_days))
+        0, max_absent_days, (0, min(60, max_absent_days))
     )
     absent_days_valid = absent_days_range[0] <= absent_days_range[1]
+    if not absent_days_valid:
+        st.warning("Absent Days min must be less than or equal to max.")
     
     attendance_valid = (
         max_absent_days > 0 and
         present_days_valid and
         absent_days_valid and
-        present_days_range[0] + absent_days_range[1] <= total_days and
-        present_days_range[1] + absent_days_range[0] >= total_days
+        present_days_range[0] + absent_days_range[1] <= total_days
     )
+    if not attendance_valid:
+        st.warning("Attendance validation failed. Ensure max absent days > 0 and total days are consistent.")
     
     st.subheader("Custom Fields")
     if st.button("Add Custom Field"):
@@ -223,6 +232,8 @@ if st.session_state.page == "📝 Data Configuration":
         attendance_min = st.slider("Attendance Percentage Min (%)", 0, 100, 0, step=5)
         attendance_max = st.slider("Attendance Percentage Max (%)", 0, 100, 80, step=5)
         drop_off_rules_valid = attendance_min <= attendance_max
+        if not drop_off_rules_valid:
+            st.warning("Drop Off Attendance min must be less than or equal to max.")
         
         drop_off_features = st.multiselect(
             "Select Features for Drop Off Rules",
@@ -249,7 +260,9 @@ if st.session_state.page == "📝 Data Configuration":
             if values:
                 drop_off_rules["features"][feature] = values
     
-    generate_disabled = not (gender_dist is not None and attendance_valid and academic_perf_valid and suspensions_valid and drop_off_rules_valid)
+    generate_disabled = not (gender_dist_valid and attendance_valid and academic_perf_valid and suspensions_valid and drop_off_rules_valid)
+    if generate_disabled:
+        st.info("Generate button is disabled due to invalid inputs. Check warnings above to resolve.")
     if st.button("Generate Historical Data", disabled=generate_disabled):
         try:
             custom_fields = [(f["name"], f["values"]) for f in st.session_state.custom_fields if f["name"] and f["values"]]
@@ -294,11 +307,10 @@ elif st.session_state.page == "🤖 Model Training":
         data = st.session_state.datasets[selected_dataset]
         
         st.subheader("Target Selection")
-        # Dynamically identify binary/categorical columns for targets
         target_options = [
             col for col in data.columns
             if col not in ["Student_ID", "Year", "Attendance_Percentage", "Present_Days", "Absent_Days", "Academic_Performance", "Suspensions"]
-            and data[col].nunique() <= 10  # Limit to columns with few unique values
+            and data[col].nunique() <= 10
             and data[col].dtype == "object" or data[col].isin(["Y", "N", "CA", "Non-CA"]).all()
         ]
         if not target_options:
@@ -484,21 +496,20 @@ elif st.session_state.page == "📊 Results":
         suspensions_valid = suspensions_range[0] <= suspensions_range[1]
         
         total_days = 180
-        present_days_range = st.slider("Present Days Range", 0, total_days, (100, 180), key="current_present")
+        present_days_range = st.slider("Present Days Range", 0, total_days, (120, 180), key="current_present")
         present_days_valid = present_days_range[0] < present_days_range[1]
         
         max_absent_days = total_days - present_days_range[0]
         if max_absent_days <= 0:
             max_absent_days = 1
         absent_days_range = st.slider(
-            "Absent Days Range", 0, max_absent_days, (0, min(80, max_absent_days)), key="current_absent"
+            "Absent Days Range", 0, max_absent_days, (0, min(60, max_absent_days)), key="current_absent"
         )
         absent_days_valid = absent_days_range[0] <= absent_days_range[1]
         
         attendance_valid = (
             max_absent_days > 0 and present_days_valid and absent_days_valid and
-            present_days_range[0] + absent_days_range[1] <= total_days and
-            present_days_range[1] + absent_days_range[0] >= total_days
+            present_days_range[0] + absent_days_range[1] <= total_days
         )
         
         use_historical_ids = st.checkbox("Use Historical Student IDs", value=False, disabled=not st.session_state.datasets)
