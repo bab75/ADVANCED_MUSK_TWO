@@ -5,8 +5,10 @@ from datetime import datetime
 import plotly.express as px
 import plotly.graph_objects as go
 from data_processing import (
-    generate_historical_data, generate_current_year_data, load_uploaded_data,
-    compute_high_risk_baselines, preprocess_data, combine_datasets
+    load_uploaded_data, compute_high_risk_baselines, preprocess_data, combine_datasets
+)
+from data_generator import (
+    generate_historical_data, generate_current_year_data
 )
 from model_training import (
     train_and_tune_model, run_predictions, plot_confusion_matrix,
