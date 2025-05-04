@@ -418,7 +418,7 @@ elif st.session_state.page == "🤖 Model Training":
                         common_transport = f"Common Transportation: {', '.join(high_risk['Transportation'].mode().tolist())}"
                         
                         existing_patterns = [p["pattern"] for p in st.session_state.patterns]
-                        for pattern in [low_attendance, common_grades, common_meal_codes, common_transport]:
+                        for pattern in [low_attendance, common_grades, common_meal_codes, common  scommon_transport]:
                             if pattern not in existing_patterns:
                                 patterns.append({"pattern": pattern, "explanation": "Identified in high-risk students"})
                         
@@ -635,7 +635,7 @@ elif st.session_state.page == "📊 Results":
                     historical_ids = st.session_state.data["Student_ID"].tolist() if use_historical_ids and st.session_state.data is not None else None
                     st.session_state.current_data = generate_current_year_data(
                         num_students, school_prefix, num_schools, grades, gender_dist,
-                        meal_codes, academic_perf, transportation, suspensions, websuspensions_range,
+                        meal_codes, academic_perf, transportation, suspensions_range,
                         present_days_range, absent_days_range, total_days, custom_fields,
                         historical_ids=historical_ids
                     )
