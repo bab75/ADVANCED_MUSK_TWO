@@ -240,12 +240,21 @@ elif st.session_state.page == "🤖 Model Training":
         st.subheader("Select Datasets")
         selected_datasets = []
         for dataset_id, data in st.session_state.datasets.items():
-            if st.checkbox(f"Dataset {dataset_id[:8]} (Rows: {len(data)})", key=f"dataset_{dataset_id}"):
+            targets_present = all(col in data.columns for col in ["CA_Status", "Drop_Off"])
+            label = f"Dataset {dataset_id[:8]} (Rows: {len(data)}, Targets: {'CA_Status, Drop_Off' if targets_present else 'Missing'})"
+            if st.checkbox(label, key=f"dataset_{dataset_id}", disabled=not targets_present):
                 selected_datasets.append(dataset_id)
+            if not targets_present:
+                st.warning(f"Dataset {dataset_id[:8]} is missing required target columns (CA_Status, Drop_Off).")
         
         if not selected_datasets:
-            st.warning("Please select at least one dataset to proceed.")
+            st.warning("Please select at least one dataset with required target columns to proceed.")
         else:
+            st.subheader("Dataset Summary")
+            for ds_id in selected_datasets:
+                data = st.session_state.datasets[ds_id]
+                st.write(f"**Dataset {ds_id[:8]}**: {len(data)} rows, Columns: {', '.join(data.columns)}")
+            
             st.subheader("Feature Selection")
             combined_data = combine_datasets([st.session_state.datasets[ds] for ds in selected_datasets])
             excluded_features = ["Student_ID", "CA_Status", "Drop_Off"]
@@ -272,10 +281,38 @@ elif st.session_state.page == "🤖 Model Training":
                     st.write(f"**{model_name} Parameters**")
                     if model_name == "Logistic Regression":
                         tuning_params[model_name] = {
-                            "C": st.multiselect(f"C values ({model_name})", [0.1, 1, 10], default=[0.1, 1, 10]),
-                            "solver": st.multiselect(f"Solver ({model_name})", ["lbfgs", "liblinear"], default=["lbfgs", "liblinear"])
+                            "estimator__C": st.multiselect(f"C values ({model_name})", [0.1, 1, 10], default=[0.1, 1, 10]),
+                            "estimator__solver": st.multiselect(f"Solver ({model_name})", ["lbfgs", "liblinear"], default=["lbfgs", "liblinear"])
                         }
-                    # Add other model parameters similarly (omitted for brevity)
+                    elif model_name == "Random Forest":
+                        tuning_params[model_name] = {
+                            "estimator__n_estimators": st.multiselect(f"Number of Trees ({model_name})", [50, 100, 200], default=[100]),
+                            "estimator__max_depth": st.multiselect(f"Max Depth ({model_name})", [None, 10, 20], default=[None]),
+                            "estimator__min_samples_split": st.multiselect(f"Min Samples Split ({model_name})", [2, 5], default=[2])
+                        }
+                    elif model_name == "Decision Tree":
+                        tuning_params[model_name] = {
+                            "estimator__max_depth": st.multiselect(f"Max Depth ({model_name})", [None, 10, 20], default=[None]),
+                            "estimator__min_samples_split": st.multiselect(f"Min Samples Split ({model_name})", [2, 5], default=[2]),
+                            "estimator__min_samples_leaf": st.multiselect(f"Min Samples Leaf ({model_name})", [1, 2], default=[1])
+                        }
+                    elif model_name == "SVM":
+                        tuning_params[model_name] = {
+                            "estimator__C": st.multiselect(f"C values ({model_name})", [0.1, 1, 10], default=[1]),
+                            "estimator__gamma": st.multiselect(f"Gamma ({model_name})", ["scale", "auto", 0.1], default=["scale"]),
+                            "estimator__kernel": st.multiselect(f"Kernel ({model_name})", ["rbf", "linear"], default=["rbf"])
+                        }
+                    elif model_name == "Gradient Boosting":
+                        tuning_params[model_name] = {
+                            "estimator__n_estimators": st.multiselect(f"Number of Trees ({model_name})", [50, 100, 200], default=[100]),
+                            "estimator__learning_rate": st.multiselect(f"Learning Rate ({model_name})", [0.01, 0.1, 0.2], default=[0.1]),
+                            "estimator__max_depth": st.multiselect(f"Max Depth ({model_name})", [3, 5], default=[3])
+                        }
+                    elif model_name == "Neural Network":
+                        tuning_params[model_name] = {
+                            "estimator__hidden_layer_sizes": st.multiselect(f"Hidden Layers ({model_name})", [(50,), (100,), (50, 50)], default=[(100,)]),
+                            "estimator__alpha": st.multiselect(f"Alpha ({model_name})", [0.0001, 0.001], default=[0.0001])
+                        }
             
             if st.button("Train Models") and features and targets:
                 try:
@@ -465,7 +502,9 @@ elif st.session_state.page == "📊 Results":
                     include_graduates=include_graduates, drop_off_rules=drop_off_rules
                 )
                 st.session_state.drop_off_rules = drop_off_rules
-                st.success("Current year data generated successfully!")
+                dataset_id = str(uuid.uuid4())
+                st.session_state.datasets[dataset_id] = st.session_state.current_data
+                st.success(f"Current year data generated successfully! Dataset ID: {dataset_id}")
                 st.subheader("Data Preview")
                 st.dataframe(st.session_state.current_data.head(10))
                 csv = st.session_state.current_data.to_csv(index=False)
@@ -481,8 +520,11 @@ elif st.session_state.page == "📊 Results":
         uploaded_file = st.file_uploader("Upload Current Year Data (CSV)", type=["csv"])
         if uploaded_file:
             try:
-                st.session_state.current_data = load_uploaded_data(uploaded_file)
-                st.success("Data uploaded successfully!")
+                data = load_uploaded_data(uploaded_file)
+                dataset_id = str(uuid.uuid4())
+                st.session_state.datasets[dataset_id] = data
+                st.session_state.current_data = data
+                st.success(f"Data uploaded successfully! Dataset ID: {dataset_id}")
                 st.subheader("Data Preview")
                 st.dataframe(st.session_state.current_data.head(10))
             except Exception as e:
