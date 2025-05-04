@@ -1,185 +1,159 @@
 import pandas as pd
 import numpy as np
-import random
-import warnings
-
-def safe_randrange(start, stop):
-    """
-    Safely generate a random integer in [start, stop).
-    If start == stop, return start to avoid empty range error.
-    """
-    if start == stop:
-        warnings.warn(f"Empty range detected in randrange({start}, {stop}). Returning {start}.")
-        return start
-    return random.randrange(start, stop)
-
-def apply_drop_off_rules(student_data, drop_off_rules):
-    """
-    Apply drop-off rules to determine Drop_Off status.
-    Rules include attendance percentage range and feature conditions.
-    Returns 'Y' if all conditions are met and CA_Status='CA', else 'N'.
-    """
-    if not drop_off_rules or not student_data["CA_Status"] == "CA":
-        return "Y" if student_data["CA_Status"] == "CA" else "N"
-    
-    attendance = student_data["Attendance_Percentage"]
-    attendance_min = drop_off_rules.get("attendance_min", 0)
-    attendance_max = drop_off_rules.get("attendance_max", 100)
-    
-    if not (attendance_min <= attendance <= attendance_max):
-        return "N"
-    
-    for feature, values in drop_off_rules.get("features", {}).items():
-        if feature in student_data and student_data[feature] not in values:
-            return "N"
-    
-    return "Y"
+import uuid
 
 def generate_historical_data(
     num_students, year_start, year_end, school_prefix, num_schools,
     grades, gender_dist, meal_codes, academic_perf, transportation,
     suspensions_range, present_days_range, absent_days_range, total_days,
-    custom_fields, id_length, dropoff_percent, drop_off_rules=None
+    custom_fields, id_length, dropoff_percent, drop_off_rules
 ):
-    years = list(range(year_start, year_end + 1))
+    """Generate historical student data with target columns."""
+    np.random.seed(42)
+    data = []
     schools = [f"{school_prefix}{i:03d}" for i in range(1, num_schools + 1)]
     genders = ["Male", "Female", "Other"]
-    gender_probs = [p / 100 for p in gender_dist]
     
-    data = []
-    student_ids = [f"{'S' + str(i).zfill(id_length - 1)}" for i in range(1, num_students + 1)]
-    
-    for student_id in student_ids:
-        for year in years:
-            grade = random.choice(grades)
-            school = random.choice(schools)
-            gender = np.random.choice(genders, p=gender_probs)
-            meal_code = random.choice(meal_codes)
-            transport = random.choice(transportation)
-            academic_performance = safe_randrange(academic_perf[0], academic_perf[1] + 1)
-            suspensions = safe_randrange(suspensions_range[0], suspensions_range[1] + 1)
-            
-            present_days = safe_randrange(present_days_range[0], present_days_range[1] + 1)
-            max_absent_days = total_days - present_days
-            if max_absent_days < absent_days_range[0]:
-                absent_days = absent_days_range[0]
-            elif max_absent_days > absent_days_range[1]:
-                absent_days = safe_randrange(absent_days_range[0], absent_days_range[1] + 1)
-            else:
-                absent_days = safe_randrange(absent_days_range[0], max_absent_days + 1)
-            
+    for year in range(year_start, year_end + 1):
+        for _ in range(num_students):
+            student_id = str(uuid.uuid4())[:id_length]
+            grade = np.random.choice(grades)
+            school = np.random.choice(schools)
+            gender = np.random.choice(genders, p=[g/100 for g in gender_dist])
+            meal_code = np.random.choice(meal_codes)
+            academic_performance = np.random.uniform(academic_perf[0], academic_perf[1])
+            transport = np.random.choice(transportation)
+            suspensions = np.random.randint(suspensions_range[0], suspensions_range[1] + 1)
+            present_days = np.random.randint(present_days_range[0], present_days_range[1] + 1)
+            absent_days = np.random.randint(absent_days_range[0], min(absent_days_range[1] + 1, total_days - present_days))
             attendance_percentage = (present_days / total_days) * 100
             
-            ca_threshold = (total_days * (100 - dropoff_percent)) / 100
-            ca_status = "CA" if present_days < ca_threshold else "Non-CA"
+            # Assign CA_Status based on attendance and dropoff_percent
+            ca_threshold = 90  # Chronic absenteeism if attendance < 90%
+            is_ca = attendance_percentage < ca_threshold and np.random.random() < (dropoff_percent / 100)
+            ca_status = "CA" if is_ca else "Non-CA"
             
-            student_data = {
+            # Assign Drop_Off based on rules
+            drop_off = "N"
+            if ca_status == "CA":
+                if (drop_off_rules["attendance_min"] <= attendance_percentage <= drop_off_rules["attendance_max"]):
+                    drop_off = "Y"
+                    for feature, values in drop_off_rules.get("features", {}).items():
+                        if feature == "Grade" and grade not in values:
+                            drop_off = "N"
+                        elif feature == "Transportation" and transport not in values:
+                            drop_off = "N"
+                        elif feature == "Meal_Code" and meal_code not in values:
+                            drop_off = "N"
+                        elif feature == "Gender" and gender not in values:
+                            drop_off = "N"
+                        elif feature == "School" and school not in values:
+                            drop_off = "N"
+            
+            row = {
                 "Student_ID": student_id,
                 "Year": year,
                 "Grade": grade,
                 "School": school,
                 "Gender": gender,
                 "Meal_Code": meal_code,
-                "Transportation": transport,
                 "Academic_Performance": academic_performance,
+                "Transportation": transport,
                 "Suspensions": suspensions,
                 "Present_Days": present_days,
                 "Absent_Days": absent_days,
                 "Attendance_Percentage": attendance_percentage,
-                "CA_Status": ca_status
+                "CA_Status": ca_status,
+                "Drop_Off": drop_off
             }
             
+            # Add custom fields
             for field_name, field_values in custom_fields:
-                values = [v.strip() for v in field_values.split(",")]
-                student_data[field_name] = random.choice(values)
+                if field_values:
+                    values = [v.strip() for v in field_values.split(",")]
+                    row[field_name] = np.random.choice(values)
             
-            student_data["Drop_Off"] = apply_drop_off_rules(student_data, drop_off_rules)
-            data.append(student_data)
+            data.append(row)
     
-    df = pd.DataFrame(data)
-    df = df.sort_values(["Student_ID", "Year"]).reset_index(drop=True)
-    return df
+    return pd.DataFrame(data)
 
 def generate_current_year_data(
     num_students, school_prefix, num_schools, grades, gender_dist,
     meal_codes, academic_perf, transportation, suspensions_range,
     present_days_range, absent_days_range, total_days, custom_fields,
-    historical_ids=None, id_length=5, dropoff_percent=20, include_graduates=False,
-    drop_off_rules=None
+    historical_ids=None, id_length=5, dropoff_percent=20,
+    include_graduates=False, drop_off_rules=None
 ):
+    """Generate current year data with target columns."""
+    np.random.seed(42)
+    data = []
     schools = [f"{school_prefix}{i:03d}" for i in range(1, num_schools + 1)]
     genders = ["Male", "Female", "Other"]
-    gender_probs = [p / 100 for p in gender_dist]
-    current_year = max(historical_ids["Year"].max() + 1, 2025) if historical_ids is not None else 2025
     
-    data = []
-    
-    if historical_ids is not None and not historical_ids.empty:
-        historical_students = historical_ids[["Student_ID", "Grade", "Year"]].drop_duplicates()
-        historical_students = historical_students.sort_values("Year").groupby("Student_ID").last().reset_index()
-        
-        if not include_graduates:
-            historical_students = historical_students[historical_students["Grade"] < 12]
-        
+    if historical_ids is not None and include_graduates:
+        historical_students = historical_ids[["Student_ID", "Grade"]].drop_duplicates()
+        historical_students["Grade"] = historical_students["Grade"].apply(lambda g: min(g + 1, 12))
         student_ids = historical_students["Student_ID"].tolist()
-        if len(student_ids) > num_students:
-            student_ids = random.sample(student_ids, num_students)
-        elif len(student_ids) < num_students:
-            additional_ids = [f"{'S' + str(i).zfill(id_length - 1)}" for i in range(len(student_ids) + 1, num_students + 1)]
-            student_ids.extend(additional_ids)
+        grades_dict = dict(zip(historical_students["Student_ID"], historical_students["Grade"]))
     else:
-        student_ids = [f"{'S' + str(i).zfill(id_length - 1)}" for i in range(1, num_students + 1)]
+        student_ids = [str(uuid.uuid4())[:id_length] for _ in range(num_students)]
     
     for student_id in student_ids:
-        grade = random.choice(grades)
-        if historical_ids is not None and student_id in historical_students["Student_ID"].values:
-            last_grade = historical_students.loc[historical_students["Student_ID"] == student_id, "Grade"].iloc[0]
-            grade = min(last_grade + 1, 12) if last_grade < 12 else 12
-        
-        school = random.choice(schools)
-        gender = np.random.choice(genders, p=gender_probs)
-        meal_code = random.choice(meal_codes)
-        transport = random.choice(transportation)
-        academic_performance = safe_randrange(academic_perf[0], academic_perf[1] + 1)
-        suspensions = safe_randrange(suspensions_range[0], suspensions_range[1] + 1)
-        
-        present_days = safe_randrange(present_days_range[0], present_days_range[1] + 1)
-        max_absent_days = total_days - present_days
-        if max_absent_days < absent_days_range[0]:
-            absent_days = absent_days_range[0]
-        elif max_absent_days > absent_days_range[1]:
-            absent_days = safe_randrange(absent_days_range[0], absent_days_range[1] + 1)
-        else:
-            absent_days = safe_randrange(absent_days_range[0], max_absent_days + 1)
-        
+        grade = grades_dict.get(student_id, np.random.choice(grades)) if historical_ids is not None else np.random.choice(grades)
+        school = np.random.choice(schools)
+        gender = np.random.choice(genders, p=[g/100 for g in gender_dist])
+        meal_code = np.random.choice(meal_codes)
+        academic_performance = np.random.uniform(academic_perf[0], academic_perf[1])
+        transport = np.random.choice(transportation)
+        suspensions = np.random.randint(suspensions_range[0], suspensions_range[1] + 1)
+        present_days = np.random.randint(present_days_range[0], present_days_range[1] + 1)
+        absent_days = np.random.randint(absent_days_range[0], min(absent_days_range[1] + 1, total_days - present_days))
         attendance_percentage = (present_days / total_days) * 100
         
-        ca_threshold = (total_days * (100 - dropoff_percent)) / 100
-        ca_status = "CA" if present_days < ca_threshold else "Non-CA"
+        # Assign CA_Status based on attendance and dropoff_percent
+        ca_threshold = 90
+        is_ca = attendance_percentage < ca_threshold and np.random.random() < (dropoff_percent / 100)
+        ca_status = "CA" if is_ca else "Non-CA"
         
-        student_data = {
+        # Assign Drop_Off based on rules
+        drop_off = "N"
+        if ca_status == "CA" and drop_off_rules:
+            if (drop_off_rules["attendance_min"] <= attendance_percentage <= drop_off_rules["attendance_max"]):
+                drop_off = "Y"
+                for feature, values in drop_off_rules.get("features", {}).items():
+                    if feature == "Grade" and grade not in values:
+                        drop_off = "N"
+                    elif feature == "Transportation" and transport not in values:
+                        drop_off = "N"
+                    elif feature == "Meal_Code" and meal_code not in values:
+                        drop_off = "N"
+                    elif feature == "Gender" and gender not in values:
+                        drop_off = "N"
+                    elif feature == "School" and school not in values:
+                        drop_off = "N"
+        
+        row = {
             "Student_ID": student_id,
-            "Year": current_year,
             "Grade": grade,
             "School": school,
             "Gender": gender,
             "Meal_Code": meal_code,
-            "Transportation": transport,
             "Academic_Performance": academic_performance,
+            "Transportation": transport,
             "Suspensions": suspensions,
             "Present_Days": present_days,
             "Absent_Days": absent_days,
             "Attendance_Percentage": attendance_percentage,
-            "CA_Status": ca_status
+            "CA_Status": ca_status,
+            "Drop_Off": drop_off
         }
         
+        # Add custom fields
         for field_name, field_values in custom_fields:
-            values = [v.strip() for v in field_values.split(",")]
-            student_data[field_name] = random.choice(values)
+            if field_values:
+                values = [v.strip() for v in field_values.split(",")]
+                row[field_name] = np.random.choice(values)
         
-        student_data["Drop_Off"] = apply_drop_off_rules(student_data, drop_off_rules)
-        data.append(student_data)
+        data.append(row)
     
-    df = pd.DataFrame(data)
-    df = df.sort_values("Student_ID").reset_index(drop=True)
-    return df
+    return pd.DataFrame(data)
