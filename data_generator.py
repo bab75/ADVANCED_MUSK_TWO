@@ -59,10 +59,18 @@ def generate_historical_data(num_students, year_start, year_end, school_prefix, 
     
     return pd.DataFrame(data)
 
-def generate_current_year_data(num_students, school_prefix, num_schools, grades, gender_dist, meal_codes, academic_perf, transportation, suspensions_range, present_days_range, absent_days_range, total_days, custom_fields):
+def generate_current_year_data(num_students, school_prefix, num_schools, grades, gender_dist, meal_codes, academic_perf, transportation, suspensions_range, present_days_range, absent_days_range, total_days, custom_fields, historical_ids=None):
     data = []
     schools = [f"{school_prefix}{i}" for i in range(1, num_schools + 1)]
     current_year = 2025
+    
+    # If historical_ids are provided, use them; otherwise, generate new IDs
+    if historical_ids:
+        # Ensure we don't exceed the number of historical IDs
+        num_students = min(num_students, len(historical_ids))
+        selected_ids = np.random.choice(historical_ids, size=num_students, replace=False).tolist()
+    else:
+        selected_ids = [f"{i:04d}C" for i in range(num_students)]
     
     for i in range(num_students):
         school = np.random.choice(schools)
@@ -84,7 +92,7 @@ def generate_current_year_data(num_students, school_prefix, num_schools, grades,
         
         attendance_percentage = (present_days / total_days) * 100
         
-        student_id = f"{i:04d}C"
+        student_id = selected_ids[i]
         
         record = {
             "Student_ID": student_id,
