@@ -415,13 +415,15 @@ elif st.session_state.page == "🤖 Model Training":
                     with col2:
                         fig = plot_confusion_matrix(y_test, metrics['y_pred'])
                         fig.update_traces(hovertemplate="Predicted: %{x}<br>Actual: %{y}<br>Count: %{z}")
-                        st.plotly_chart(fig)
+                        fig.update_layout(width=600, height=400, margin=dict(l=50, r=50, t=50, b=50))
+                        st.plotly_chart(fig, use_container_width=False)
                     
                     if model_name in ["Random Forest", "Decision Tree", "Gradient Boosting"]:
                         fig = plot_feature_importance(model_info["model"], model_info["feature_names"])
                         if fig:
                             fig.update_traces(hovertemplate="Feature: %{x}<br>Importance: %{y:.4f}")
-                            st.plotly_chart(fig)
+                            fig.update_layout(width=600, height=400, margin=dict(l=50, r=50, t=50, b=50))
+                            st.plotly_chart(fig, use_container_width=False)
                     
                     st.write(get_model_explanation(model_name, X_test_processed[:1], model_info["model"]))
         
@@ -480,7 +482,10 @@ elif st.session_state.page == "🤖 Model Training":
                                     title="Model Version Comparison",
                                     barmode="group",
                                     xaxis_title="Model (Version)",
-                                    yaxis_title="Score"
+                                    yaxis_title="Score",
+                                    width=600,
+                                    height=400,
+                                    margin=dict(l=50, r=50, t=50, b=50)
                                 )
                                 with st.expander("About Model Comparison Chart"):
                                     st.markdown("""
@@ -496,7 +501,7 @@ elif st.session_state.page == "🤖 Model Training":
                                     Use this to identify the best-performing models for chronic absenteeism prediction.
                                     Hover over bars to see exact metric values.
                                     """)
-                                st.plotly_chart(fig)
+                                st.plotly_chart(fig, use_container_width=False)
                         else:
                             st.warning("Please select at least one model to compare.")
         
@@ -652,7 +657,8 @@ elif st.session_state.page == "📊 Results":
                         hover_data={"value": True}
                     )
                     fig.update_traces(hovertemplate="Grade: %{y}<br>School: %{x}<br>CA Probability: %{z:.2f}")
-                    st.plotly_chart(fig)
+                    fig.update_layout(width=600, height=400, margin=dict(l=50, r=50, t=50, b=50))
+                    st.plotly_chart(fig, use_container_width=False)
                     
                     with st.expander("About CA Probability Distribution"):
                         st.markdown("""
@@ -672,7 +678,8 @@ elif st.session_state.page == "📊 Results":
                         hover_data=["CA_Probability", "CA_Prediction"]
                     )
                     fig.update_traces(hovertemplate="Probability: %{x:.2f}<br>Prediction: %{customdata[1]}<br>Count: %{y}")
-                    st.plotly_chart(fig)
+                    fig.update_layout(width=600, height=400, margin=dict(l=50, r=50, t=50, b=50))
+                    st.plotly_chart(fig, use_container_width=False)
                     
                     with st.expander("About CA Prediction Heatmap"):
                         st.markdown("""
@@ -690,7 +697,8 @@ elif st.session_state.page == "📊 Results":
                         hover_data={"value": True}
                     )
                     fig.update_traces(hovertemplate="Grade: %{y}<br>Prediction: %{x}<br>Count: %{z}")
-                    st.plotly_chart(fig)
+                    fig.update_layout(width=600, height=400, margin=dict(l=50, r=50, t=50, b=50))
+                    st.plotly_chart(fig, use_container_width=False)
                     
                     csv = st.session_state.current_data.to_csv(index=False)
                     st.download_button("Download Predictions", csv, "predictions.csv", "text/csv")
@@ -748,9 +756,12 @@ elif st.session_state.page == "📊 Results":
                         title="Student Prediction Scatter Plot",
                         xaxis_title="Attendance Percentage",
                         yaxis_title="CA Probability",
-                        showlegend=False
+                        showlegend=False,
+                        width=600,
+                        height=400,
+                        margin=dict(l=50, r=50, t=50, b=50)
                     )
-                    st.plotly_chart(fig)
+                    st.plotly_chart(fig, use_container_width=False)
                     
                     st.subheader("Filtered Students")
                     st.dataframe(filtered_data)
@@ -768,7 +779,7 @@ elif st.session_state.page == "📊 Results":
                     if st.form_submit_button("Analyze"):
                         st.session_state.selected_student_id = selected_id
                 
-                if st.session_state.selected_student_id in studentg_ids:
+                if st.session_state.selected_student_id in student_ids:
                     st.markdown('<div class="student-analysis-container">', unsafe_allow_html=True)
                     student_data = st.session_state.current_data[st.session_state.current_data["Student_ID"] == st.session_state.selected_student_id]
                     if not student_data.empty:
@@ -844,8 +855,8 @@ elif st.session_state.page == "📊 Results":
                                     }
                                 }
                             ))
-                            fig.update_layout(height=300)
-                            st.plotly_chart(fig)
+                            fig.update_layout(width=600, height=400, margin=dict(l=50, r=50, t=50, b=50))
+                            st.plotly_chart(fig, use_container_width=False)
                             
                             if risk_score > 50:
                                 st.warning("High risk of chronic absenteeism!")
@@ -870,9 +881,12 @@ elif st.session_state.page == "📊 Results":
                             fig.update_layout(
                                 title="Attendance Trend",
                                 xaxis_title="Year",
-                                yaxis_title="Attendance Percentage"
+                                yaxis_title="Attendance Percentage",
+                                width=600,
+                                height=400,
+                                margin=dict(l=50, r=50, t=50, b=50)
                             )
-                            st.plotly_chart(fig)
+                            st.plotly_chart(fig, use_container_width=False)
                     
                     st.markdown('</div>', unsafe_allow_html=True)
             else:
@@ -964,7 +978,8 @@ elif st.session_state.page == "📚 Documentation":
                 hover_data={"value": True}
             )
             fig.update_traces(hovertemplate="Feature X: %{x}<br>Feature Y: %{y}<br>Correlation: %{z:.2f}")
-            st.plotly_chart(fig)
+            fig.update_layout(width=600, height=400, margin=dict(l=50, r=50, t=50, b=50))
+            st.plotly_chart(fig, use_container_width=False)
             
             with st.expander("About Attendance Correlation Bar Plot"):
                 st.markdown("""
@@ -987,9 +1002,12 @@ elif st.session_state.page == "📚 Documentation":
             fig.update_layout(
                 title="Correlation of Attendance with Other Factors",
                 xaxis_title="Feature",
-                yaxis_title="Correlation Coefficient"
+                yaxis_title="Correlation Coefficient",
+                width=600,
+                height=400,
+                margin=dict(l=50, r=50, t=50, b=50)
             )
-            st.plotly_chart(fig)
+            st.plotly_chart(fig, use_container_width=False)
             
             with st.expander("About Attendance vs. Suspensions Scatter Plot"):
                 st.markdown("""
@@ -1010,7 +1028,8 @@ elif st.session_state.page == "📚 Documentation":
                 hover_data=["Suspensions", "Attendance_Percentage", "CA_Status"]
             )
             fig.update_traces(hovertemplate="Suspensions: %{customdata[0]}<br>Attendance: %{customdata[1]}%<br>CA Status: %{customdata[2]}")
-            st.plotly_chart(fig)
+            fig.update_layout(width=600, height=400, margin=dict(l=50, r=50, t=50, b=50))
+            st.plotly_chart(fig, use_container_width=False)
         
         with st.expander("AI-Powered Pattern Recognition"):
             if st.session_state.models:
@@ -1031,7 +1050,8 @@ elif st.session_state.page == "📚 Documentation":
                                 """)
                             st.write(f"Key factors influencing absenteeism (based on {model_name} feature importance):")
                             fig.update_traces(hovertemplate="Feature: %{x}<br>Importance: %{y:.4f}")
-                            st.plotly_chart(fig)
+                            fig.update_layout(width=600, height=400, margin=dict(l=50, r=50, t=50, b=50))
+                            st.plotly_chart(fig, use_container_width=False)
                             displayed = True
                             break
                 if not displayed:
@@ -1099,9 +1119,12 @@ elif st.session_state.page == "📚 Documentation":
                 fig.update_layout(
                     title=f"Average Attendance by {group_by}",
                     xaxis_title=group_by,
-                    yaxis_title="Attendance Percentage"
+                    yaxis_title="Attendance Percentage",
+                    width=600,
+                    height=400,
+                    margin=dict(l=50, r=50, t=50, b=50)
                 )
-                st.plotly_chart(fig)
+                st.plotly_chart(fig, use_container_width=False)
                 
                 with st.expander("About Attendance Distribution Violin Plot"):
                     st.markdown("""
@@ -1126,9 +1149,12 @@ elif st.session_state.page == "📚 Documentation":
                 fig.update_layout(
                     title=f"Attendance Distribution by {group_by}",
                     xaxis_title=group_by,
-                    yaxis_title="Attendance Percentage"
+                    yaxis_title="Attendance Percentage",
+                    width=600,
+                    height=400,
+                    margin=dict(l=50, r=50, t=50, b=50)
                 )
-                st.plotly_chart(fig)
+                st.plotly_chart(fig, use_container_width=False)
         
         with st.expander("Dataset Comparison"):
             st.subheader("Dataset Comparison Heatmap")
@@ -1171,14 +1197,15 @@ elif st.session_state.page == "📚 Documentation":
                     heatmap_pivot = heatmap_pivot.fillna(0)
                     
                     fig = px.imshow(
-                        heatmap_pivot,
+                        heatmap_data,
                         title=f"{metric} by {group_var} Across Datasets",
                         labels={"color": f"Normalized {metric}"},
                         color_continuous_scale="Blues",
                         hover_data={"value": True}
                     )
                     fig.update_traces(hovertemplate=f"{group_var}: %{{y}}<br>Dataset: %{{x}}<br>{metric}: %{{z:.2f}}")
-                    st.plotly_chart(fig)
+                    fig.update_layout(width=600, height=400, margin=dict(l=50, r=50, t=50, b=50))
+                    st.plotly_chart(fig, use_container_width=False)
                 else:
                     st.warning("No data available for the selected group or metric.")
             else:
