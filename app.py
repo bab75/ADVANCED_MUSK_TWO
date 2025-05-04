@@ -768,7 +768,7 @@ elif st.session_state.page == "📊 Results":
                     if st.form_submit_button("Analyze"):
                         st.session_state.selected_student_id = selected_id
                 
-                if st.session_state.selected_student_id in student_ids:
+                if st.session_state.selected_student_id in studentg_ids:
                     st.markdown('<div class="student-analysis-container">', unsafe_allow_html=True)
                     student_data = st.session_state.current_data[st.session_state.current_data["Student_ID"] == st.session_state.selected_student_id]
                     if not student_data.empty:
@@ -895,18 +895,18 @@ elif st.session_state.page == "📚 Documentation":
             if not high_risk.empty:
                 st.subheader("Discovered Patterns")
                 if st.session_state.patterns:
-                    with st.expander("View Discovered Patterns", expanded=False):
-                        for i, pattern in enumerate(st.session_state.patterns):
-                            col1, col2, col3 = st.columns([4, 1, 1])
-                            with col1:
-                                st.write(f"- {pattern['pattern']}: {pattern['explanation']}")
-                            with col2:
-                                if st.button("Edit", key=f"edit_pattern_{i}"):
-                                    st.session_state.edit_pattern_index = i
-                            with col3:
-                                if st.button("Delete", key=f"delete_pattern_{i}"):
-                                    st.session_state.patterns.pop(i)
-                                    st.experimental_rerun()
+                    st.markdown("**View Discovered Patterns**")
+                    for i, pattern in enumerate(st.session_state.patterns):
+                        col1, col2, col3 = st.columns([4, 1, 1])
+                        with col1:
+                            st.write(f"- {pattern['pattern']}: {pattern['explanation']}")
+                        with col2:
+                            if st.button("Edit", key=f"edit_pattern_{i}"):
+                                st.session_state.edit_pattern_index = i
+                        with col3:
+                            if st.button("Delete", key=f"delete_pattern_{i}"):
+                                st.session_state.patterns.pop(i)
+                                st.experimental_rerun()
                 
                 if 'edit_pattern_index' in st.session_state:
                     st.subheader("Edit Pattern")
