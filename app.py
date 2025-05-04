@@ -38,6 +38,7 @@ def clear_session_state():
     st.session_state.patterns = []
     st.session_state.page = "📝 Data Configuration"
     st.session_state.compare_models = []
+    st.session_state.drop_off_rules = {}
     st.session_state.high_risk_baselines = None
 
 # Initialize session state
@@ -63,6 +64,8 @@ if 'compare_models' not in st.session_state:
     st.session_state.compare_models = []
 if 'selected_group_by' not in st.session_state:
     st.session_state.selected_group_by = None
+if 'drop_off_rules' not in st.session_state:
+    st.session_state.drop_off_rules = {}
 if 'high_risk_baselines' not in st.session_state:
     st.session_state.high_risk_baselines = None
 
@@ -113,7 +116,7 @@ if st.session_state.page == "📝 Data Configuration":
     school_prefix = st.text_input("School Prefix (e.g., 10U)", "10U")
     num_schools = st.number_input("Number of Schools", 1, 10, 3)
     id_length = st.radio("Student ID Length", [5, 7], index=0)
-    dropoff_percent = st.slider("Target Drop Off Percentage (%)", 5, 50, 20, step=5, help="Percentage of students with CA Status = CA and Drop_Off = Y")
+    dropoff_percent = st.slider("Target CA Percentage (%)", 5, 50, 20, step=5, help="Percentage of students with CA Status = CA")
     
     grades = st.multiselect("Grades", list(range(1, 13)), default=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
     
@@ -204,16 +207,63 @@ if st.session_state.page == "📝 Data Configuration":
                 st.session_state.custom_fields.pop(i)
                 st.experimental_rerun()
     
-    generate_disabled = not (gender_dist is not None and attendance_valid and academic_perf_valid and suspensions_valid and present_days_valid and absent_days_valid)
+    st.subheader("Drop Off Rules")
+    with st.expander("Define Drop Off Rules (Optional)", expanded=False):
+        st.markdown("""
+        Define rules to assign `Drop_Off = 'Y'` for students with `CA_Status = 'CA'`.  
+        - Specify an **Attendance Percentage Range** to filter CA students.  
+        - Select **Features** (e.g., Transportation, Meal Code) and their values to include.  
+        - Only CA students meeting all conditions will have `Drop_Off = 'Y'`; others get `Drop_Off = 'N'`.  
+        - Leave empty to assign `Drop_Off = 'Y'` to all CA students.
+        """)
+        attendance_min = st.slider("Attendance Percentage Min (%)", 0, 100, 0, step=5)
+        attendance_max = st.slider("Attendance Percentage Max (%)", 0, 100, 80, step=5)
+        if attendance_min > attendance_max:
+            st.error("Attendance Percentage Min must be less than or equal to Max.")
+            drop_off_rules_valid = False
+        else:
+            drop_off_rules_valid = True
+        
+        drop_off_features = st.multiselect(
+            "Select Features for Drop Off Rules",
+            ["Grade", "Transportation", "Meal_Code", "Gender", "School"] + [f["name"] for f in st.session_state.custom_fields if f["name"]],
+            key="drop_off_features"
+        )
+        drop_off_rules = {"attendance_min": attendance_min, "attendance_max": attendance_max, "features": {}}
+        
+        for feature in drop_off_features:
+            if feature == "Grade":
+                values = st.multiselect(f"Select {feature} Values", grades, default=grades, key=f"drop_off_{feature}")
+            elif feature == "Transportation":
+                values = st.multiselect(f"Select {feature} Values", transportation, default=transportation, key=f"drop_off_{feature}")
+            elif feature == "Meal_Code":
+                values = st.multiselect(f"Select {feature} Values", meal_codes, default=meal_codes, key=f"drop_off_{feature}")
+            elif feature == "Gender":
+                values = st.multiselect(f"Select {feature} Values", ["Male", "Female", "Other"], default=["Male", "Female", "Other"], key=f"drop_off_{feature}")
+            elif feature == "School":
+                schools = [f"{school_prefix}{i:03d}" for i in range(1, num_schools + 1)]
+                values = st.multiselect(f"Select {feature} Values", schools, default=schools, key=f"drop_off_{feature}")
+            else:
+                custom_field = next((f for f in st.session_state.custom_fields if f["name"] == feature), None)
+                if custom_field:
+                    values_list = [v.strip() for v in custom_field["values"].split(",")]
+                    values = st.multiselect(f"Select {feature} Values", values_list, default=values_list, key=f"drop_off_{feature}")
+                else:
+                    values = []
+            if values:
+                drop_off_rules["features"][feature] = values
+    
+    generate_disabled = not (gender_dist is not None and attendance_valid and academic_perf_valid and suspensions_valid and present_days_valid and absent_days_valid and drop_off_rules_valid)
     if st.button("Generate Historical Data", disabled=generate_disabled):
         try:
             st.session_state.patterns = []
             custom_fields = [(f["name"], f["values"]) for f in st.session_state.custom_fields if f["name"] and f["values"]]
+            st.session_state.drop_off_rules = drop_off_rules
             data = generate_historical_data(
                 num_students, year_start, year_end, school_prefix, num_schools,
                 grades, gender_dist, meal_codes, academic_perf, transportation,
                 suspensions_range, present_days_range, absent_days_range, total_days,
-                custom_fields, id_length, dropoff_percent
+                custom_fields, id_length, dropoff_percent, drop_off_rules
             )
             st.session_state.data = data
             st.session_state.high_risk_baselines = compute_high_risk_baselines(data)
@@ -553,7 +603,7 @@ elif st.session_state.page == "📊 Results":
         school_prefix = st.text_input("School Prefix (e.g., CU)", "CU")
         num_schools = st.number_input("Number of Schools", 1, 10, 3)
         id_length = st.radio("Student ID Length", [5, 7], index=0)
-        dropoff_percent = st.slider("Target Drop Off Percentage (%)", 5, 50, 20, step=5, help="Percentage of students with CA Status = CA and Drop_Off = Y")
+        dropoff_percent = st.slider("Target CA Percentage (%)", 5, 50, 20, step=5, help="Percentage of students with CA Status = CA")
         
         grades = st.multiselect("Grades", list(range(1, 13)), default=[1, 2, 3, 4, 5], key="current_grades")
         
@@ -653,7 +703,53 @@ elif st.session_state.page == "📊 Results":
                     st.session_state.current_custom_fields.pop(i)
                     st.experimental_rerun()
         
-        generate_disabled = not (gender_dist is not None and attendance_valid and academic_perf_valid and suspensions_valid and present_days_valid and absent_days_valid)
+        st.subheader("Drop Off Rules")
+        with st.expander("Define Drop Off Rules (Optional)", expanded=False):
+            st.markdown("""
+            Define rules to assign `Drop_Off = 'Y'` for students with `CA_Status = 'CA'`.  
+            - Specify an **Attendance Percentage Range** to filter CA students.  
+            - Select **Features** (e.g., Transportation, Meal Code) and their values to include.  
+            - Only CA students meeting all conditions will have `Drop_Off = 'Y'`; others get `Drop_Off = 'N'`.  
+            - Leave empty to assign `Drop_Off = 'Y'` to all CA students.
+            """)
+            attendance_min = st.slider("Attendance Percentage Min (%)", 0, 100, 0, step=5, key="current_attendance_min")
+            attendance_max = st.slider("Attendance Percentage Max (%)", 0, 100, 80, step=5, key="current_attendance_max")
+            if attendance_min > attendance_max:
+                st.error("Attendance Percentage Min must be less than or equal to Max.")
+                drop_off_rules_valid = False
+            else:
+                drop_off_rules_valid = True
+            
+            drop_off_features = st.multiselect(
+                "Select Features for Drop Off Rules",
+                ["Grade", "Transportation", "Meal_Code", "Gender", "School"] + [f["name"] for f in st.session_state.current_custom_fields if f["name"]],
+                key="current_drop_off_features"
+            )
+            drop_off_rules = {"attendance_min": attendance_min, "attendance_max": attendance_max, "features": {}}
+            
+            for feature in drop_off_features:
+                if feature == "Grade":
+                    values = st.multiselect(f"Select {feature} Values", grades, default=grades, key=f"current_drop_off_{feature}")
+                elif feature == "Transportation":
+                    values = st.multiselect(f"Select {feature} Values", transportation, default=transportation, key=f"current_drop_off_{feature}")
+                elif feature == "Meal_Code":
+                    values = st.multiselect(f"Select {feature} Values", meal_codes, default=meal_codes, key=f"current_drop_off_{feature}")
+                elif feature == "Gender":
+                    values = st.multiselect(f"Select {feature} Values", ["Male", "Female", "Other"], default=["Male", "Female", "Other"], key=f"current_drop_off_{feature}")
+                elif feature == "School":
+                    schools = [f"{school_prefix}{i:03d}" for i in range(1, num_schools + 1)]
+                    values = st.multiselect(f"Select {feature} Values", schools, default=schools, key=f"current_drop_off_{feature}")
+                else:
+                    custom_field = next((f for f in st.session_state.current_custom_fields if f["name"] == feature), None)
+                    if custom_field:
+                        values_list = [v.strip() for v in custom_field["values"].split(",")]
+                        values = st.multiselect(f"Select {feature} Values", values_list, default=values_list, key=f"current_drop_off_{feature}")
+                    else:
+                        values = []
+                if values:
+                    drop_off_rules["features"][feature] = values
+        
+        generate_disabled = not (gender_dist is not None and attendance_valid and academic_perf_valid and suspensions_valid and present_days_valid and absent_days_valid and drop_off_rules_valid)
         if st.button("Generate Current Year Data", disabled=generate_disabled):
             try:
                 custom_fields = [(f["name"], f["values"]) for f in st.session_state.current_custom_fields if f["name"] and f["values"]]
@@ -663,8 +759,9 @@ elif st.session_state.page == "📊 Results":
                     meal_codes, academic_perf, transportation, suspensions_range,
                     present_days_range, absent_days_range, total_days, custom_fields,
                     historical_ids=historical_data, id_length=id_length, dropoff_percent=dropoff_percent,
-                    include_graduates=include_graduates
+                    include_graduates=include_graduates, drop_off_rules=drop_off_rules
                 )
+                st.session_state.drop_off_rules = drop_off_rules
                 st.success("Current year data generated successfully!")
                 st.subheader("Data Preview")
                 st.dataframe(st.session_state.current_data.head(10))
@@ -725,7 +822,23 @@ elif st.session_state.page == "📊 Results":
                 prediction_data = st.session_state.current_data.copy()
                 prediction_data["CA_Prediction"] = predictions
                 prediction_data["CA_Probability"] = probabilities
-                prediction_data["Drop_Off"] = prediction_data["CA_Prediction"].apply(lambda x: "Y" if x == "CA" else "N")
+                
+                # Apply Drop Off rules to predictions
+                def apply_prediction_drop_off_rules(row):
+                    if row["CA_Prediction"] != "CA":
+                        return "N"
+                    attendance = row["Attendance_Percentage"]
+                    rules = st.session_state.drop_off_rules
+                    attendance_min = rules.get("attendance_min", 0)
+                    attendance_max = rules.get("attendance_max", 100)
+                    if not (attendance_min <= attendance <= attendance_max):
+                        return "N"
+                    for feature, values in rules.get("features", {}).items():
+                        if feature in row and row[feature] not in values:
+                            return "N"
+                    return "Y"
+                
+                prediction_data["Drop_Off"] = prediction_data.apply(apply_prediction_drop_off_rules, axis=1)
                 
                 # Identify prediction causes based on patterns
                 def identify_causes(row):
