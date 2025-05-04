@@ -32,21 +32,40 @@ def get_model(model_name):
 
 def train_model(model_name, X_train, y_train, X_test, y_test):
     """Train a model and return metrics for multi-target learning."""
-    model = get_model(model_name)
-    model.fit(X_train, y_train)
-    
-    y_pred = model.predict(X_test)
-    metrics = {}
-    for i, target in enumerate(y_train.columns):
-        metrics[target] = {
-            "accuracy": accuracy_score(y_test.iloc[:, i], y_pred[:, i]),
-            "precision": precision_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
-            "recall": recall_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
-            "f1": f1_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
-            "roc_auc": roc_auc_score(y_test.iloc[:, i], model.predict_proba(X_test)[i][:, 1]),
-            "y_pred": y_pred[:, i]
-        }
-    return model, metrics
+    try:
+        model = get_model(model_name)
+        model.fit(X_train, y_train)
+        
+        y_pred = model.predict(X_test)
+        # Validate y_pred shape
+        if not isinstance(y_pred, np.ndarray) or y_pred.shape[1] != y_train.shape[1]:
+            raise ValueError(f"Invalid y_pred shape for {model_name}: expected ({X_test.shape[0]}, {y_train.shape[1]}), got {y_pred.shape}")
+        
+        metrics = {}
+        for i, target in enumerate(y_train.columns):
+            try:
+                probas = model.predict_proba(X_test)[i][:, 1] if hasattr(model, "predict_proba") else np.zeros(len(y_test))
+                metrics[target] = {
+                    "accuracy": accuracy_score(y_test.iloc[:, i], y_pred[:, i]),
+                    "precision": precision_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
+                    "recall": recall_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
+                    "f1": f1_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
+                    "roc_auc": roc_auc_score(y_test.iloc[:, i], probas) if hasattr(model, "predict_proba") else 0.0,
+                    "y_pred": y_pred[:, i].tolist()  # Store as list to avoid serialization issues
+                }
+            except Exception as e:
+                st.warning(f"Error computing metrics for target {target} in {model_name}: {str(e)}")
+                metrics[target] = {
+                    "accuracy": 0.0,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0.0,
+                    "roc_auc": 0.0,
+                    "y_pred": []
+                }
+        return model, metrics
+    except Exception as e:
+        raise ValueError(f"Error training {model_name}: {str(e)}")
 
 def tune_model(model_name, X_train, y_train, X_test, y_test, custom_params=None):
     """Tune a model with GridSearchCV for multi-target learning."""
@@ -55,9 +74,12 @@ def tune_model(model_name, X_train, y_train, X_test, y_test, custom_params=None)
         param_grid = custom_params or {}
         # Define a custom scorer for multi-target classification
         def multi_target_accuracy(estimator, X, y):
-            y_pred = estimator.predict(X)
-            scores = [accuracy_score(y.iloc[:, i], y_pred[:, i]) for i in range(y.shape[1])]
-            return np.mean(scores)
+            try:
+                y_pred = estimator.predict(X)
+                scores = [accuracy_score(y.iloc[:, i], y_pred[:, i]) for i in range(y.shape[1])]
+                return np.mean(scores)
+            except Exception as e:
+                return 0.0
         
         # Use n_jobs=1 to avoid multiprocessing issues
         grid_search = GridSearchCV(
@@ -71,18 +93,32 @@ def tune_model(model_name, X_train, y_train, X_test, y_test, custom_params=None)
         
         best_model = grid_search.best_estimator_
         y_pred = best_model.predict(X_test)
+        # Validate y_pred shape
+        if not isinstance(y_pred, np.ndarray) or y_pred.shape[1] != y_train.shape[1]:
+            raise ValueError(f"Invalid y_pred shape for {model_name}: expected ({X_test.shape[0]}, {y_train.shape[1]}), got {y_pred.shape}")
+        
         metrics = {}
         for i, target in enumerate(y_train.columns):
-            # Get probabilities for each target separately
-            probas = best_model.predict_proba(X_test)[i][:, 1]
-            metrics[target] = {
-                "accuracy": accuracy_score(y_test.iloc[:, i], y_pred[:, i]),
-                "precision": precision_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
-                "recall": recall_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
-                "f1": f1_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
-                "roc_auc": roc_auc_score(y_test.iloc[:, i], probas),
-                "y_pred": y_pred[:, i]
-            }
+            try:
+                probas = best_model.predict_proba(X_test)[i][:, 1] if hasattr(best_model, "predict_proba") else np.zeros(len(y_test))
+                metrics[target] = {
+                    "accuracy": accuracy_score(y_test.iloc[:, i], y_pred[:, i]),
+                    "precision": precision_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
+                    "recall": recall_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
+                    "f1": f1_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
+                    "roc_auc": roc_auc_score(y_test.iloc[:, i], probas) if hasattr(best_model, "predict_proba") else 0.0,
+                    "y_pred": y_pred[:, i].tolist()  # Store as list to avoid serialization issues
+                }
+            except Exception as e:
+                st.warning(f"Error computing metrics for target {target} in {model_name}: {str(e)}")
+                metrics[target] = {
+                    "accuracy": 0.0,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0.0,
+                    "roc_auc": 0.0,
+                    "y_pred": []
+                }
         return best_model, metrics, grid_search.best_params_
     except Exception as e:
         raise ValueError(f"Error tuning {model_name}: {str(e)}")
