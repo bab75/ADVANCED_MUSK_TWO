@@ -129,22 +129,37 @@ if st.session_state.page == "📝 Data Configuration":
     with st.container():
         total_days = 180
         st.write(f"Total School Days: {total_days}")
-        present_days_range = st.slider("Present Days Range", 0, total_days, (100, total_days))
-        absent_days_range = st.slider("Absent Days Range", 0, total_days, (0, 80))
+        present_days_range = st.slider("Present Days Range", 0, total_days, (90, total_days))
+        
+        # Dynamically constrain absent_days_range based on present_days_range
+        max_absent_days = total_days - present_days_range[0]
+        absent_days_range = st.slider(
+            "Absent Days Range",
+            0,
+            max_absent_days,
+            (0, min(80, max_absent_days)),
+            help=f"Maximum absent days cannot exceed {max_absent_days} (total days - minimum present days)."
+        )
         
         # Enhanced validation for attendance ranges
         attendance_valid = True
-        if present_days_range[0] >= present_days_range[1]:
-            st.error("Present days range minimum must be less than maximum")
+        if max_absent_days <= 0:
+            st.error(f"Error: Minimum present days ({present_days_range[0]}) equals or exceeds total days ({total_days}). Reduce minimum present days.")
             attendance_valid = False
-        if absent_days_range[0] >= absent_days_range[1]:
-            st.error("Absent days range minimum must be less than maximum")
+        elif present_days_range[0] + absent_days_range[1] > total_days:
+            st.error(f"Error: Minimum present days ({present_days_range[0]}) plus maximum absent days ({absent_days_range[1]}) exceeds total days ({total_days}). Reduce absent days range.")
             attendance_valid = False
-        if present_days_range[0] + absent_days_range[1] > total_days:
-            st.error(f"Minimum present days ({present_days_range[0]}) plus maximum absent days ({absent_days_range[1]}) exceeds total days ({total_days})")
+        elif present_days_range[1] + absent_days_range[0] < total_days:
+            st.error(f"Error: Maximum present days ({present_days_range[1]}) plus minimum absent days ({absent_days_range[0]}) is less than total days ({total_days}). Increase present or absent days range.")
             attendance_valid = False
-        if present_days_range[1] + absent_days_range[0] < total_days:
-            st.error(f"Maximum present days ({present_days_range[1]}) plus minimum absent days ({absent_days_range[0]}) is less than total days ({total_days})")
+        elif present_days_range[1] < present_days_range[0] or absent_days_range[1] < absent_days_range[0]:
+            st.error("Error: Range maximum must be greater than or equal to minimum.")
+            attendance_valid = False
+        elif total_days - present_days_range[0] < absent_days_range[0]:
+            st.error(f"Error: Maximum possible absent days ({total_days - present_days_range[0]}) is less than minimum absent days ({absent_days_range[0]}). Reduce minimum absent days or lower minimum present days.")
+            attendance_valid = False
+        elif total_days - present_days_range[1] < absent_days_range[0]:
+            st.error(f"Error: Minimum absent days ({absent_days_range[0]}) cannot be achieved with maximum present days ({present_days_range[1]}). Increase maximum absent days or reduce maximum present days.")
             attendance_valid = False
     
     # Custom Fields
@@ -164,23 +179,15 @@ if st.session_state.page == "📝 Data Configuration":
                     st.session_state.custom_fields.pop(i)
                     st.rerun()
     
-    if st.button("Generate Historical Data") and gender_dist is not None and attendance_valid:
+    if st.button("Generate Historical Data", disabled=not (gender_dist is not None and attendance_valid)):
         try:
             st.session_state.patterns = []
             custom_fields = [(f["name"], f["values"]) for f in st.session_state.custom_fields if f["name"] and f["values"]]
-            
-            # Ensure ranges are valid before passing to generator
-            present_min = max(0, min(present_days_range[0], total_days))
-            present_max = max(0, min(present_days_range[1], total_days))
-            absent_min = max(0, min(absent_days_range[0], total_days))
-            absent_max = max(0, min(absent_days_range[1], total_days))
-            
             data = generate_historical_data(
                 num_students, year_start, year_end, school_prefix, num_schools,
                 grades, gender_dist, meal_codes, academic_perf, transportation,
-                suspensions_range, (present_min, present_max), (absent_min, absent_max), total_days, custom_fields
+                suspensions_range, present_days_range, absent_days_range, total_days, custom_fields
             )
-            
             st.session_state.data = data
             dataset_name = f"Dataset_{datetime.now().strftime('%Y-%m-%d_%H:%M')}"
             st.session_state.datasets[dataset_name] = data
@@ -523,20 +530,19 @@ elif st.session_state.page == "🤖 Model Training":
                                     height=400,
                                     margin=dict(l=50, r=50, t=50, b=50)
                                 )
-                                with st.expander("About Model Comparison Chart"):
-                                    st.markdown("""
-                                    **About Model Comparison Chart**
+                                st.markdown("""
+                                **About Model Comparison Chart**
 
-                                    This bar chart compares the performance of selected model versions across key metrics:
-                                    - **Accuracy**: Proportion of correct predictions.
-                                    - **Precision**: Proportion of positive predictions that were correct.
-                                    - **Recall**: Proportion of actual positives correctly identified.
-                                    - **F1 Score**: Harmonic mean of precision and recall.
-                                    - **ROC AUC**: Area under the receiver operating characteristic curve, measuring model discrimination.
+                                This bar chart compares the performance of selected model versions across key metrics:
+                                - **Accuracy**: Proportion of correct predictions.
+                                - **Precision**: Proportion of positive predictions that were correct.
+                                - **Recall**: Proportion of actual positives correctly identified.
+                                - **F1 Score**: Harmonic mean of precision and recall.
+                                - **ROC AUC**: Area under the receiver operating characteristic curve, measuring model discrimination.
 
-                                    Use this to identify the best-performing models for chronic absenteeism prediction.
-                                    Hover over bars to see exact metric values.
-                                    """)
+                                Use this to identify the best-performing models for chronic absenteeism prediction.
+                                Hover over bars to see exact metric values.
+                                """)
                                 st.plotly_chart(fig, use_container_width=False)
                         else:
                             st.warning("Please select at least one model to compare.")
@@ -596,41 +602,50 @@ elif st.session_state.page == "📊 Results":
             
             total_days = 180
             st.write(f"Total School Days: {total_days}")
-            present_days_range = st.slider("Present Days Range", 0, total_days, (100, total_days), key="current_present")
-            absent_days_range = st.slider("Absent Days Range", 0, total_days, (0, 80), key="current_absent")
+            present_days_range = st.slider("Present Days Range", 0, total_days, (90, total_days), key="current_present")
+            
+            # Dynamically constrain absent_days_range based on present_days_range
+            max_absent_days = total_days - present_days_range[0]
+            if max_absent_days <= 0:
+                st.error(f"Error: Minimum present days ({present_days_range[0]}) equals or exceeds total days ({total_days}). Reduce minimum present days.")
+                max_absent_days = 1  # Prevent slider crash, but button will be disabled
+            absent_days_range = st.slider(
+                "Absent Days Range",
+                0,
+                max_absent_days,
+                (0, min(80, max_absent_days)),
+                key="current_absent",
+                help=f"Maximum absent days cannot exceed {max_absent_days} (total days - minimum present days)."
+            )
             
             # Enhanced validation for current year data
             current_attendance_valid = True
-            if present_days_range[0] >= present_days_range[1]:
-                st.error("Present days range minimum must be less than maximum")
+            if max_absent_days <= 0:
+                st.error(f"Error: Minimum present days ({present_days_range[0]}) equals or exceeds total days ({total_days}). Reduce minimum present days.")
                 current_attendance_valid = False
-            if absent_days_range[0] >= absent_days_range[1]:
-                st.error("Absent days range minimum must be less than maximum")
+            elif present_days_range[0] + absent_days_range[1] > total_days:
+                st.error(f"Error: Minimum present days ({present_days_range[0]}) plus maximum absent days ({absent_days_range[1]}) exceeds total days ({total_days}). Reduce absent days range.")
                 current_attendance_valid = False
-            if present_days_range[0] + absent_days_range[1] > total_days:
-                st.error(f"Minimum present days ({present_days_range[0]}) plus maximum absent days ({absent_days_range[1]}) exceeds total days ({total_days})")
+            elif present_days_range[1] + absent_days_range[0] < total_days:
+                st.error(f"Error: Maximum present days ({present_days_range[1]}) plus minimum absent days ({absent_days_range[0]}) is less than total days ({total_days}). Increase present or absent days range.")
                 current_attendance_valid = False
-            if present_days_range[1] + absent_days_range[0] < total_days:
-                st.error(f"Maximum present days ({present_days_range[1]}) plus minimum absent days ({absent_days_range[0]}) is less than total days ({total_days})")
+            elif total_days - present_days_range[0] < absent_days_range[0]:
+                st.error(f"Error: Maximum possible absent days ({total_days - present_days_range[0]}) is less than minimum absent days ({absent_days_range[0]}). Reduce minimum absent days or lower minimum present days.")
+                current_attendance_valid = False
+            elif total_days - present_days_range[1] < absent_days_range[0]:
+                st.error(f"Error: Minimum absent days ({absent_days_range[0]}) cannot be achieved with maximum present days ({present_days_range[1]}). Increase maximum absent days or reduce maximum present days.")
                 current_attendance_valid = False
             
             use_historical_ids = st.checkbox("Use Historical Student IDs", value=False, disabled=st.session_state.data is None)
             
-            if st.button("Generate Current Year Data") and gender_dist is not None and current_attendance_valid:
+            if st.button("Generate Current Year Data", disabled=not (gender_dist is not None and current_attendance_valid)):
                 try:
                     custom_fields = [(f["name"], f["values"]) for f in st.session_state.current_custom_fields if f["name"] and f["values"]]
                     historical_ids = st.session_state.data["Student_ID"].tolist() if use_historical_ids and st.session_state.data is not None else None
-                    
-                    # Ensure ranges are valid before passing to generator
-                    present_min = max(0, min(present_days_range[0], total_days))
-                    present_max = max(0, min(present_days_range[1], total_days))
-                    absent_min = max(0, min(absent_days_range[0], total_days))
-                    absent_max = max(0, min(absent_days_range[1], total_days))
-                    
                     st.session_state.current_data = generate_current_year_data(
                         num_students, school_prefix, num_schools, grades, gender_dist,
                         meal_codes, academic_perf, transportation, suspensions_range,
-                        (present_min, present_max), (absent_min, absent_max), total_days, custom_fields,
+                        present_days_range, absent_days_range, total_days, custom_fields,
                         historical_ids=historical_ids
                     )
                     st.success("Current year data generated successfully!")
@@ -1210,17 +1225,16 @@ elif st.session_state.page == "📚 Documentation":
         
         with st.expander("Dataset Comparison"):
             st.subheader("Dataset Comparison Heatmap")
-            with st.expander("About Dataset Comparison Heatmap"):
-                st.markdown("""
-                **About Dataset Comparison Heatmap**
+            st.markdown("""
+            **About Dataset Comparison Heatmap**
 
-                This heatmap compares a selected metric (e.g., average attendance) across datasets by group (e.g., Grade, School).
-                - **Normalized values (0-1)**: Ensures fair comparison across datasets.
-                - **Blue gradient**: Darker blues indicate higher values.
-                - **Filters**: Select grouping variables and metrics to customize the view.
-                - **Hover**: Shows exact values and dataset details.
-                - Use this to identify trends or differences across historical and current datasets.
-                """)
+            This heatmap compares a selected metric (e.g., average attendance) across datasets by group (e.g., Grade, School).
+            - **Normalized values (0-1)**: Ensures fair comparison across datasets.
+            - **Blue gradient**: Darker blues indicate higher values.
+            - **Filters**: Select grouping variables and metrics to customize the view.
+            - **Hover**: Shows exact values and dataset details.
+            - Use this to identify trends or differences across historical and current datasets.
+            """)
             
             if st.session_state.datasets or st.session_state.current_data is not None:
                 group_vars = ["Grade", "School", "Gender", "Meal_Code", "Transportation"]
