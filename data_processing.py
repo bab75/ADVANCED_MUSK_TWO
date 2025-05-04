@@ -11,6 +11,8 @@ def load_uploaded_data(file):
             raise ValueError("Uploaded CSV is empty.")
         if "Student_ID" in data.columns:
             data["Student_ID"] = data["Student_ID"].astype(str)
+        if "School" in data.columns:
+            data["School"] = data["School"].astype(str)
         return data
     except Exception as e:
         raise ValueError(f"Error loading CSV: {str(e)}")
@@ -21,8 +23,10 @@ def compute_high_risk_baselines(data):
         numeric_cols = data.select_dtypes(include=[np.number]).columns
         baselines = {}
         for col in numeric_cols:
-            if col not in ["Student_ID", "Year"]:
-                baselines[col] = {
+            if col not in ["Student_ID", "School", "Year"]:
+                baselines
+
+[col] = {
                     "mean": data[col].mean(),
                     "std": data[col].std()
                 }
@@ -37,8 +41,8 @@ def preprocess_data(data, features, targets):
         # Ensure data is a DataFrame
         data = pd.DataFrame(data)
         
-        # Define columns to exclude from processing (identifiers)
-        exclude_cols = ["Student_ID", "School"]
+        # Define columns to always treat as categorical (identifiers or non-features)
+        categorical_cols = ["Student_ID", "School"]
         
         # Handle missing values
         for col in data.columns:
@@ -51,8 +55,15 @@ def preprocess_data(data, features, targets):
         X = data[features].copy() if features else pd.DataFrame()
         y = pd.DataFrame()
         
-        # Identify categorical and numerical columns
-        categorical_cols = [col for col in X.columns if X[col].dtype == "object" or X[col].dtype.name == "category" or col in exclude_cols]
+        # Ensure School is treated as categorical if included in features
+        for col in X.columns:
+            if col in categorical_cols or X[col].dtype == "object" or X[col].dtype.name == "category":
+                categorical_cols.append(col) if col not in categorical_cols else None
+        
+        # Remove duplicates in categorical_cols
+        categorical_cols = list(set(categorical_cols) & set(X.columns))
+        
+        # Numerical columns are those not in categorical_cols
         numerical_cols = [col for col in X.columns if col not in categorical_cols]
         
         # Encode categorical features
@@ -67,14 +78,13 @@ def preprocess_data(data, features, targets):
                     st.warning(f"Error encoding feature {col}: {str(e)}")
                     X[col] = 0
         
-        # Scale numerical features
+        # Scale numerical features only
         scaler = StandardScaler()
         if numerical_cols:
             try:
                 X[numerical_cols] = scaler.fit_transform(X[numerical_cols])
             except Exception as e:
                 st.warning(f"Error scaling numerical features: {str(e)}")
-                # If scaling fails, fill with zeros to prevent crash
                 X[numerical_cols] = 0
         
         # Process targets
@@ -111,6 +121,8 @@ def combine_datasets(datasets):
         combined = pd.concat(datasets, ignore_index=True)
         if "Student_ID" in combined.columns:
             combined["Student_ID"] = combined["Student_ID"].astype(str)
+        if "School" in combined.columns:
+            combined["School"] = combined["School"].astype(str)
         return combined
     except Exception as e:
         raise ValueError(f"Error combining datasets: {str(e)}")
