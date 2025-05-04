@@ -1020,11 +1020,11 @@ elif st.session_state.page == "📚 Documentation":
                         model_info = st.session_state.models[model_name]
                         fig = plot_feature_importance(model_info["model"], model_info["feature_names"])
                         if fig:
-                            with st.expander("About Feature Importance Plot"):
-                                st.markdown("""
-                                **About Feature Importance Plot**
+                            with st.expander(f"About Feature Importance Plot ({model_name})"):
+                                st.markdown(f"""
+                                **About Feature Importance Plot ({model_name})**
 
-                                This bar plot shows which features most influence the model's predictions (based on {model_name}).
+                                This bar plot shows which features most influence {model_name}'s predictions.
                                 - **Higher bars**: More important features.
                                 - **Hover** to see exact importance scores.
                                 - Use this to identify key risk factors, like low attendance or high suspensions.
@@ -1049,7 +1049,7 @@ elif st.session_state.page == "📚 Documentation":
                 - **Purpose**: Identify at-risk groups, such as grades with low attendance or schools with high absenteeism.
                 - **Insights**:
                   - Compare average attendance across groups to spot trends.
-                  - Use box plots to see attendance variability within groups.
+                  - Use violin plots to see attendance variability within groups.
                   - Filter to focus on specific demographics or conditions.
                 - **Use Case**: Target interventions, like tutoring for low-performing grades or transportation support for specific schools.
                 """)
@@ -1165,4 +1165,21 @@ elif st.session_state.page == "📚 Documentation":
                 
                 if heatmap_data:
                     heatmap_df = pd.concat(heatmap_data, ignore_index=True)
-                    heatmap_pivot = heatmap_df.pivot(index=group_var, columns="Dataset",
+                    heatmap_pivot = heatmap_df.pivot(index=group_var, columns="Dataset", values=metric)
+                    # Normalize data for consistency
+                    heatmap_pivot = (heatmap_pivot - heatmap_pivot.min().min()) / (heatmap_pivot.max().max() - heatmap_pivot.min().min())
+                    heatmap_pivot = heatmap_pivot.fillna(0)
+                    
+                    fig = px.imshow(
+                        heatmap_pivot,
+                        title=f"{metric} by {group_var} Across Datasets",
+                        labels={"color": f"Normalized {metric}"},
+                        color_continuous_scale="Blues",
+                        hover_data={"value": True}
+                    )
+                    fig.update_traces(hovertemplate=f"{group_var}: %{{y}}<br>Dataset: %{{x}}<br>{metric}: %{{z:.2f}}")
+                    st.plotly_chart(fig)
+                else:
+                    st.warning("No data available for the selected group or metric.")
+            else:
+                st.info("Generate or upload data to enable dataset comparison.")
