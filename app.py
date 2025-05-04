@@ -603,7 +603,7 @@ elif st.session_state.page == "📊 Results":
         if non_numeric_features:
             st.info(f"Non-numeric features selected: {', '.join(non_numeric_features)}. These will be encoded automatically.")
         
-        group_by_options = [col for col in available_features if st.session_state.current_data[col].dtype == "object" or st.session_state.current_data[f].dtype.name == "category" or col == "Grade"]
+        group_by_options = [col for col in available_features if st.session_state.current_data[col].dtype == "object" or st.session_state.current_data[col].dtype.name == "category" or col == "Grade"]
         group_by_options += [f["name"] for f in st.session_state.current_custom_fields if f["name"] in st.session_state.current_data.columns]
         group_by_feature = st.selectbox(
             "Group Drop Off % By",
