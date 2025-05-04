@@ -14,6 +14,18 @@ body {
     margin-right: 8px;
 }
 
+.action-item {
+    display: flex;
+    align-items: center;
+    margin: 5px 0;
+}
+
+.action-icon {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+}
+
 h1, h2, h3 {
     color: #2c3e50;
     font-weight: bold;
