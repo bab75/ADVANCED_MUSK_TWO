@@ -221,7 +221,7 @@ elif st.session_state.page == "🤖 Model Training":
     st.markdown("""
     <h1>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 30px; height: 30px; vertical-align: middle; margin-right: 10px;">
-            <path d="M12 2a10 10 0 00-8 4v2h2v2H4v2h2v2H4v2h2v2h2a10 10 0 008-4 10 10 0 008 4h2v-2h-2v-2h2v-2h-2v-2h2V8h-2V6a10 10 0 00-8-4zm0 2a8 8 0 016.32 3H17v2h- personally v2h2v2h-2v2h2v2h-1.32A8 8 0 0112 20a8 8 0 01-6.32-3H7v-2H5v-2h2v-2H5V9h2V7h1.32A8 8 0 0112 4z"/>
+            <path d="M12 2a10 10 0 00-8 4v2h2v2H4v2h2v2H4v2h2v2h2a10 10 0 008-4 10 10 0 008 4h2v-2h-2v-2h2v-2h-2v-2h2V8h-2V6a10 10 0 00-8-4zm0 2a8 8 0 016.32 3H17v2h-2v2h2v2h-2v2h2v2h-1.32A8 8 0 0112 20a8 8 0 01-6.32-3H7v-2H5v-2h2v-2H5V9h2V7h1.32A8 8 0 0112 4z"/>
         </svg>
         🤖 Model Training
     </h1>
@@ -447,7 +447,8 @@ elif st.session_state.page == "📊 Results":
         if not attendance_valid:
             st.error("Invalid attendance configuration.")
         
-        use_historical_ids = st.checkbox("Use Historical Student IDs", value=False, disabled=not st.session_state.data)
+        # Check if historical data exists to enable/disable the checkbox
+        use_historical_ids = st.checkbox("Use Historical Student IDs", value=False, disabled=st.session_state.data is None)
         include_graduates = st.checkbox("Include Graduating Students (Cap at Grade 12)", value=False, disabled=not use_historical_ids)
         
         st.subheader("Custom Fields")
