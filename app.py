@@ -94,10 +94,10 @@ if st.session_state.page == "📝 Data Configuration":
     st.header("Generate Historical Data")
     num_students = st.slider("Number of Students", 100, 5000, 1000)
     year_start, year_end = st.slider("Academic Years", 2020, 2025, (2020, 2024), step=1)
-    school_prefix = st.text_input("School Prefix (e.g., 10U)", "10U")
+    school_prefix = st.text_input("School Prefix (e.g., 10U)", "10U001")
     num_schools = st.number_input("Number of Schools", 1, 10, 3)
     id_length = st.radio("Student ID Length", [5, 7], index=0)
-    dropoff_percent = st.slider("Target Drop Off Percentage (%)", 5, 50, 20, step=5, help="Percentage of students with CA Status = CA")
+    dropoff_percent = st.slider("Target Drop Off Percentage (%)", 0, 50, 2, step=5, help="Percentage of students with CA Status = CA")
     
     grades = st.multiselect("Grades", list(range(1, 13)), default=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
     
