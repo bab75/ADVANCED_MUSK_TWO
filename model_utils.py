@@ -40,10 +40,10 @@ def train_model(model_name, X_train, y_train, X_test, y_test):
     for i, target in enumerate(y_train.columns):
         metrics[target] = {
             "accuracy": accuracy_score(y_test.iloc[:, i], y_pred[:, i]),
-            "precision": precision_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA", zero_division=0),
-            "recall": recall_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA", zero_division=0),
-            "f1": f1_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA", zero_division=0),
-            "roc_auc": roc_auc_score(y_test.iloc[:, i], model.predict_proba(X_test)[:, i, 1]),
+            "precision": precision_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
+            "recall": recall_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
+            "f1": f1_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
+            "roc_auc": roc_auc_score(y_test.iloc[:, i], model.predict_proba(X_test)[i][:, 1]),
             "y_pred": y_pred[:, i]
         }
     return model, metrics
@@ -53,20 +53,34 @@ def tune_model(model_name, X_train, y_train, X_test, y_test, custom_params=None)
     try:
         model = get_model(model_name)
         param_grid = custom_params or {}
+        # Define a custom scorer for multi-target classification
+        def multi_target_accuracy(estimator, X, y):
+            y_pred = estimator.predict(X)
+            scores = [accuracy_score(y.iloc[:, i], y_pred[:, i]) for i in range(y.shape[1])]
+            return np.mean(scores)
+        
         # Use n_jobs=1 to avoid multiprocessing issues
-        grid_search = GridSearchCV(model, param_grid, cv=3, scoring="accuracy", n_jobs=1)
+        grid_search = GridSearchCV(
+            model,
+            param_grid,
+            cv=3,
+            scoring=multi_target_accuracy,
+            n_jobs=1
+        )
         grid_search.fit(X_train, y_train)
         
         best_model = grid_search.best_estimator_
         y_pred = best_model.predict(X_test)
         metrics = {}
         for i, target in enumerate(y_train.columns):
+            # Get probabilities for each target separately
+            probas = best_model.predict_proba(X_test)[i][:, 1]
             metrics[target] = {
                 "accuracy": accuracy_score(y_test.iloc[:, i], y_pred[:, i]),
-                "precision": precision_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA", zero_division=0),
-                "recall": recall_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA", zero_division=0),
-                "f1": f1_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA", zero_division=0),
-                "roc_auc": roc_auc_score(y_test.iloc[:, i], best_model.predict_proba(X_test)[:, i, 1]),
+                "precision": precision_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
+                "recall": recall_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
+                "f1": f1_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
+                "roc_auc": roc_auc_score(y_test.iloc[:, i], probas),
                 "y_pred": y_pred[:, i]
             }
         return best_model, metrics, grid_search.best_params_
