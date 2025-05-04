@@ -5,7 +5,7 @@ import uuid
 def generate_historical_data(num_students, year_start, year_end, school_prefix, num_schools, grades, gender_dist, meal_codes, academic_perf, transportation, suspensions_range, present_days_range, absent_days_range, total_days, custom_fields):
     data = []
     schools = [f"{school_prefix}{i}" for i in range(1, num_schools + 1)]
-    used_ids = set()  # Track used IDs to ensure uniqueness
+    used_ids = set()
     
     for _ in range(num_students):
         year = np.random.randint(year_start, year_end + 1)
@@ -17,7 +17,6 @@ def generate_historical_data(num_students, year_start, year_end, school_prefix, 
         transport = np.random.choice(transportation)
         suspensions = np.random.randint(suspensions_range[0], suspensions_range[1] + 1)
         
-        # Generate present and absent days within constraints
         present_days = np.random.randint(present_days_range[0], present_days_range[1] + 1)
         max_absent = min(absent_days_range[1], total_days - present_days)
         min_absent = max(absent_days_range[0], total_days - present_days)
@@ -30,7 +29,6 @@ def generate_historical_data(num_students, year_start, year_end, school_prefix, 
         attendance_percentage = (present_days / total_days) * 100
         ca_status = "CA" if attendance_percentage <= 90 else "NO-CA"
         
-        # Generate unique Student_ID (6-digit number + 'H')
         while True:
             num_id = np.random.randint(0, 1000000)
             student_id = f"{num_id:06d}H"
@@ -38,7 +36,6 @@ def generate_historical_data(num_students, year_start, year_end, school_prefix, 
                 used_ids.add(student_id)
                 break
         
-        # Base record
         record = {
             "Student_ID": student_id,
             "Year": year,
@@ -55,7 +52,6 @@ def generate_historical_data(num_students, year_start, year_end, school_prefix, 
             "CA_Status": ca_status
         }
         
-        # Add custom fields
         for field_name, field_values in custom_fields:
             record[field_name] = np.random.choice(field_values.split(","))
         
@@ -77,7 +73,6 @@ def generate_current_year_data(num_students, school_prefix, num_schools, grades,
         transport = np.random.choice(transportation)
         suspensions = np.random.randint(suspensions_range[0], suspensions_range[1] + 1)
         
-        # Generate present and absent days within constraints
         present_days = np.random.randint(present_days_range[0], present_days_range[1] + 1)
         max_absent = min(absent_days_range[1], total_days - present_days)
         min_absent = max(absent_days_range[0], total_days - present_days)
@@ -89,10 +84,8 @@ def generate_current_year_data(num_students, school_prefix, num_schools, grades,
         
         attendance_percentage = (present_days / total_days) * 100
         
-        # Generate Student_ID (4-digit zero-padded number + 'C')
         student_id = f"{i:04d}C"
         
-        # Base record
         record = {
             "Student_ID": student_id,
             "Year": current_year,
@@ -108,7 +101,6 @@ def generate_current_year_data(num_students, school_prefix, num_schools, grades,
             "Attendance_Percentage": attendance_percentage
         }
         
-        # Add custom fields
         for field_name, field_values in custom_fields:
             record[field_name] = np.random.choice(field_values.split(","))
         
