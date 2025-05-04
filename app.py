@@ -643,7 +643,7 @@ elif st.session_state.page == "📊 Results":
                     if "Student_ID" in st.session_state.current_data.columns and st.session_state.data is not None:
                         historical_data = st.session_state.data[["Student_ID", "Attendance_Percentage", "Academic_Performance", "Suspensions"]]
                         st.session_state.current_data = st.session_state.current_data.merge(
-                            historical_data, on="Student_ID", on="Student_ID", how="left", suffixes=("", "_Historical")
+                            historical_data, on="Student_ID", how="left", suffixes=("", "_Historical")
                         )
                     
                     st.subheader("Prediction Results")
