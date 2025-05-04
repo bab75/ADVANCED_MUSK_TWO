@@ -1,18 +1,32 @@
 import pandas as pd
 import numpy as np
 import random
-import uuid
 
 def generate_historical_data(
     num_students, year_start, year_end, school_prefix, num_schools,
     grades, gender_dist, meal_codes, academic_perf, transportation,
     suspensions_range, present_days_range, absent_days_range, total_days,
-    custom_fields
+    custom_fields, id_length, dropoff_percent
 ):
     data = []
     years = list(range(year_start, year_end + 1))
+    used_ids = set()
     
-    for _ in range(num_students):
+    def generate_student_id():
+        min_id = 10 ** (id_length - 1)
+        max_id = (10 ** id_length) - 1
+        while True:
+            student_id = random.randint(min_id, max_id)
+            if student_id not in used_ids:
+                used_ids.add(student_id)
+                return str(student_id)
+    
+    target_ca_count = int(num_students * len(years) * (dropoff_percent / 100))
+    ca_indices = random.sample(range(num_students * len(years)), target_ca_count)
+    
+    record_index = 0
+    for student_idx in range(num_students):
+        student_id = generate_student_id()
         for year in years:
             school_id = f"{school_prefix}{random.randint(1, num_schools)}"
             grade = random.choice(grades)
@@ -33,9 +47,13 @@ def generate_historical_data(
             )
             
             attendance_percentage = (present_days / total_days) * 100
-            ca_status = "CA" if absent_days / total_days >= 0.1 else "Non-CA"
             
-            student_id = str(uuid.uuid4())
+            is_ca = record_index in ca_indices
+            if is_ca:
+                absent_days = max(absent_days, int(total_days * 0.1))
+                present_days = total_days - absent_days
+                attendance_percentage = (present_days / total_days) * 100
+            ca_status = "CA" if is_ca else "Non-CA"
             
             record = {
                 "Student_ID": student_id,
@@ -58,6 +76,7 @@ def generate_historical_data(
                 record[field_name] = random.choice([v.strip() for v in values])
             
             data.append(record)
+            record_index += 1
     
     return pd.DataFrame(data)
 
@@ -65,10 +84,23 @@ def generate_current_year_data(
     num_students, school_prefix, num_schools, grades, gender_dist,
     meal_codes, academic_perf, transportation, suspensions_range,
     present_days_range, absent_days_range, total_days, custom_fields,
-    historical_ids=None
+    historical_ids=None, id_length=5, dropoff_percent=20
 ):
     data = []
-    year = max(2025, present_days_range[1] // 180 + 2020)  # Estimate current year
+    year = 2025
+    used_ids = set(historical_ids) if historical_ids else set()
+    
+    def generate_student_id():
+        min_id = 10 ** (id_length - 1)
+        max_id = (10 ** id_length) - 1
+        while True:
+            student_id = random.randint(min_id, max_id)
+            if student_id not in used_ids:
+                used_ids.add(student_id)
+                return str(student_id)
+    
+    target_ca_count = int(num_students * (dropoff_percent / 100))
+    ca_indices = random.sample(range(num_students), target_ca_count)
     
     for i in range(num_students):
         school_id = f"{school_prefix}{random.randint(1, num_schools)}"
@@ -91,11 +123,16 @@ def generate_current_year_data(
         
         attendance_percentage = (present_days / total_days) * 100
         
-        # Use historical IDs if provided, otherwise generate new ones
-        if historical_ids and len(historical_ids) > i:
+        is_ca = i in ca_indices
+        if is_ca:
+            absent_days = max(absent_days, int(total_days * 0.1))
+            present_days = total_days - absent_days
+            attendance_percentage = (present_days / total_days) * 100
+        
+        if historical_ids and i < len(historical_ids):
             student_id = historical_ids[i]
         else:
-            student_id = str(uuid.uuid4())
+            student_id = generate_student_id()
         
         record = {
             "Student_ID": student_id,
