@@ -76,7 +76,7 @@ st.session_state.page = page
 # Clear All Data Button
 if st.sidebar.button("Clear All Data"):
     clear_session_state()
-    st.experimental_rerun()
+    st.rerun()
 
 # Page 1: Data Configuration
 if st.session_state.page == "📝 Data Configuration":
@@ -89,14 +89,17 @@ if st.session_state.page == "📝 Data Configuration":
     </h1>
     """, unsafe_allow_html=True)
     
-    with st.expander("Dataset Settings", expanded=True):
-        st.subheader("Generate Historical Data")
+    # Dataset Settings
+    st.subheader("Generate Historical Data")
+    with st.container():
         num_students = st.slider("Number of Students", 100, 5000, 1000)
         year_start, year_end = st.slider("Academic Years", 2010, 2025, (2015, 2020), step=1)
         school_prefix = st.text_input("School Prefix (e.g., 10U)", "10U")
         num_schools = st.number_input("Number of Schools", 1, 10, 3)
     
-    with st.expander("Student Demographics"):
+    # Student Demographics
+    st.subheader("Student Demographics")
+    with st.container():
         grades = st.multiselect("Grades", list(range(1, 13)), default=[1, 2, 3, 4, 5])
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -113,25 +116,41 @@ if st.session_state.page == "📝 Data Configuration":
         else:
             gender_dist = [male_dist, female_dist, other_dist]
     
-    with st.expander("School Settings"):
+    # School Settings
+    st.subheader("School Settings")
+    with st.container():
         meal_codes = st.multiselect("Meal Codes", ["Free", "Reduced", "Paid"], default=["Free", "Reduced", "Paid"])
         academic_perf = st.slider("Academic Performance Range (%)", 1, 100, (40, 90))
         transportation = st.multiselect("Transportation Options", ["Bus", "Walk", "Car"], default=["Bus", "Walk"])
         suspensions_range = st.slider("Suspensions Range (per year)", 0, 10, (0, 3))
     
-    with st.expander("Attendance Settings"):
+    # Attendance Settings
+    st.subheader("Attendance Settings")
+    with st.container():
         total_days = 180
         st.write(f"Total School Days: {total_days}")
         present_days_range = st.slider("Present Days Range", 0, total_days, (100, total_days))
         absent_days_range = st.slider("Absent Days Range", 0, total_days, (0, 80))
         
-        if present_days_range[0] + absent_days_range[1] > total_days or present_days_range[1] + absent_days_range[0] < total_days:
-            st.error(f"Present and Absent days ranges must allow for total days to sum to {total_days}.")
+        # Enhanced validation for attendance ranges
+        if present_days_range[0] + absent_days_range[1] > total_days:
+            st.error(f"Error: Minimum present days ({present_days_range[0]}) plus maximum absent days ({absent_days_range[1]}) exceeds total days ({total_days}).")
+            attendance_valid = False
+        elif present_days_range[1] + absent_days_range[0] < total_days:
+            st.error(f"Error: Maximum present days ({present_days_range[1]}) plus minimum absent days ({absent_days_range[0]}) is less than total days ({total_days}).")
+            attendance_valid = False
+        elif present_days_range[1] < present_days_range[0] or absent_days_range[1] < absent_days_range[0]:
+            st.error("Error: Range maximum must be greater than or equal to minimum.")
+            attendance_valid = False
+        elif total_days - present_days_range[0] < absent_days_range[0]:
+            st.error(f"Error: Maximum possible absent days ({total_days - present_days_range[0]}) is less than minimum absent days ({absent_days_range[0]}).")
             attendance_valid = False
         else:
             attendance_valid = True
     
-    with st.expander("Custom Fields"):
+    # Custom Fields
+    st.subheader("Custom Fields")
+    with st.container():
         if st.button("Add Custom Field"):
             st.session_state.custom_fields.append({"name": "", "values": ""})
         
@@ -144,7 +163,7 @@ if st.session_state.page == "📝 Data Configuration":
             with col3:
                 if st.button("Remove", key=f"remove_{i}"):
                     st.session_state.custom_fields.pop(i)
-                    st.experimental_rerun()
+                    st.rerun()
     
     if st.button("Generate Historical Data") and gender_dist is not None and attendance_valid:
         try:
@@ -573,8 +592,14 @@ elif st.session_state.page == "📊 Results":
             present_days_range = st.slider("Present Days Range", 0, total_days, (100, total_days), key="current_present")
             absent_days_range = st.slider("Absent Days Range", 0, total_days, (0, 80), key="current_absent")
             
-            if present_days_range[0] + absent_days_range[1] > total_days or present_days_range[1] + absent_days_range[0] < total_days:
-                st.error(f"Present and Absent days ranges must allow for total days to sum to {total_days}.")
+            if present_days_range[0] + absent_days_range[1] > total_days:
+                st.error(f"Error: Minimum present days ({present_days_range[0]}) plus maximum absent days ({absent_days_range[1]}) exceeds total days ({total_days}).")
+                attendance_valid = False
+            elif present_days_range[1] + absent_days_range[0] < total_days:
+                st.error(f"Error: Maximum present days ({present_days_range[1]}) plus minimum absent days ({absent_days_range[0]}) is less than total days ({total_days}).")
+                attendance_valid = False
+            elif total_days - present_days_range[0] < absent_days_range[0]:
+                st.error(f"Error: Maximum possible absent days ({total_days - present_days_range[0]}) is less than minimum absent days ({absent_days_range[0]}).")
                 attendance_valid = False
             else:
                 attendance_valid = True
@@ -617,7 +642,7 @@ elif st.session_state.page == "📊 Results":
             with col3:
                 if st.button("Remove", key=f"current_remove_{i}"):
                     st.session_state.current_custom_fields.pop(i)
-                    st.experimental_rerun()
+                    st.rerun()
     
     if st.session_state.current_data is not None and st.session_state.models:
         with st.expander("Run Predictions"):
@@ -930,7 +955,7 @@ elif st.session_state.page == "📚 Documentation":
                         with col3:
                             if st.button("Delete", key=f"delete_pattern_{i}"):
                                 st.session_state.patterns.pop(i)
-                                st.experimental_rerun()
+                                st.rerun()
                 
                 if 'edit_pattern_index' in st.session_state:
                     st.subheader("Edit Pattern")
@@ -940,7 +965,7 @@ elif st.session_state.page == "📚 Documentation":
                     if st.button("Save Changes"):
                         st.session_state.patterns[idx] = {"pattern": new_pattern, "explanation": new_explanation}
                         del st.session_state.edit_pattern_index
-                        st.experimental_rerun()
+                        st.rerun()
             
             st.subheader("How to Add New Patterns")
             st.markdown("""
@@ -967,7 +992,7 @@ elif st.session_state.page == "📚 Documentation":
                 if new_pattern and new_explanation:
                     st.session_state.patterns.append({"pattern": new_pattern, "explanation": new_explanation})
                     st.success("Pattern added successfully!")
-                    st.experimental_rerun()
+                    st.rerun()
             
             st.subheader("Correlation Visualizations")
             with st.expander("About Correlation Heatmap"):
