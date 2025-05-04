@@ -92,7 +92,7 @@ if st.session_state.page == "📝 Data Configuration":
     
     st.header("Generate Historical Data")
     num_students = st.slider("Number of Students", 100, 5000, 1000)
-    year_start, year_end = st.slider("Academic Years", 2020, 2025, (2015, 2020), step=1)
+    year_start, year_end = st.slider("Academic Years", 2020, 2025, (2020, 2024), step=1)
     school_prefix = st.text_input("School Prefix (e.g., 10U)", "10U")
     num_schools = st.number_input("Number of Schools", 1, 10, 3)
     
