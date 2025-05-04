@@ -329,7 +329,7 @@ elif st.session_state.page == "🤖 Model Training":
                     elif model_name == "Decision Tree":
                         tuning_params[model_name] = {
                             "estimator__max_depth": st.multiselect(f"Max Depth ({model_name})", [None, 10, 20], default=[None]),
-                            "analyzer__min_samples_split": st.multiselect(f"Min Samples Split ({model_name})", [2, 5], default=[2]),
+                            "estimator__min_samples_split": st.multiselect(f"Min Samples Split ({model_name})", [2, 5], default=[2]),
                             "estimator__min_samples_leaf": st.multiselect(f"Min Samples Leaf ({model_name})", [1, 2], default=[1])
                         }
                     elif model_name == "SVM":
