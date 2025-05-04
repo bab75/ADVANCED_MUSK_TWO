@@ -203,13 +203,13 @@ elif st.session_state.page == "🤖 Model Training":
             target_options = [col for col in st.session_state.data.columns if col not in ["Student_ID"]]
             target = st.selectbox("Select Target Variable", target_options, index=target_options.index("CA_Status") if "CA_Status" in target_options else 0)
             
-            with st.expander("Model Recommendations"):
-                recommendations = recommend_models(st.session_state.data[target])
-                st.write("**Recommended Models**:")
-                for model, reason in recommendations.items():
-                    available = model in st.session_state.models
-                    status = "✅ Available" if available else "⚠️ Not Trained"
-                    st.write(f"- **{model}**: {reason} [{status}]")
+            st.subheader("Model Recommendations")
+            recommendations = recommend_models(st.session_state.data[target])
+            st.write("**Recommended Models**:")
+            for model, reason in recommendations.items():
+                available = model in st.session_state.models
+                status = "✅ Available" if available else "⚠️ Not Trained"
+                st.write(f"- **{model}**: {reason} [{status}]")
         else:
             st.warning("No datasets available. Generate or upload data in Data Configuration.")
             target = "CA_Status"
@@ -932,9 +932,8 @@ elif st.session_state.page == "📚 Documentation":
                         del st.session_state.edit_pattern_index
                         st.experimental_rerun()
             
-            st.subheader("Add New Pattern")
-            with st.expander("How to Add New Patterns"):
-                st.markdown("""
+            st.subheader("How to Add New Patterns")
+            st.markdown("""
                 **How to Add New Patterns**
 
                 Patterns summarize trends in high-risk students to inform interventions. Use the Group Analysis section to identify trends in the data, such as low attendance or specific demographics.
@@ -951,6 +950,7 @@ elif st.session_state.page == "📚 Documentation":
                 4. Submit to save the pattern for future reference.
                 """)
             
+            st.subheader("Add New Pattern")
             new_pattern = st.text_input("New Pattern")
             new_explanation = st.text_area("Pattern Explanation")
             if st.button("Add Pattern"):
@@ -1197,7 +1197,7 @@ elif st.session_state.page == "📚 Documentation":
                     heatmap_pivot = heatmap_pivot.fillna(0)
                     
                     fig = px.imshow(
-                        heatmap_data,
+                        heatmap_pivot,
                         title=f"{metric} by {group_var} Across Datasets",
                         labels={"color": f"Normalized {metric}"},
                         color_continuous_scale="Blues",
