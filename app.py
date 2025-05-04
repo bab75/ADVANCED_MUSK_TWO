@@ -664,5 +664,5 @@ elif st.session_state.page == "📚 Documentation":
             if model_name in st.session_state.models:
                 fig = plot_feature_importance(st.session_state.models[model_name]["model"], st.session_state.models[model_name]["feature_names"])
                 if fig:
-                    st.plotly_chart.fig))
+                    st.plotly_chart(fig)
                     break
