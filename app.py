@@ -8,11 +8,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
-from sklearn.multioutput import MultiOutputClassifier
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import uuid
-import os
-import tempfile
 from data_generator import generate_historical_data, generate_current_year_data
 from model_utils import train_model, tune_model, get_model_explanation, plot_confusion_matrix, plot_feature_importance
 import plotly.io as pio
@@ -34,7 +31,7 @@ def clear_session_state():
     st.session_state.current_custom_fields = []
     st.session_state.selected_student_id = None
     st.session_state.model_versions = {}
-    st.session_state.patterns = []
+    st.session_state.patterns = {}
     st.session_state.page = "📝 Data Configuration"
     st.session_state.compare_models = []
     st.session_state.drop_off_rules = {}
@@ -56,7 +53,7 @@ if 'selected_student_id' not in st.session_state:
 if 'model_versions' not in st.session_state:
     st.session_state.model_versions = {}
 if 'patterns' not in st.session_state:
-    st.session_state.patterns = []
+    st.session_state.patterns = {}  # {dataset_name: [{"pattern": str, "explanation": str}]}
 if 'page' not in st.session_state:
     st.session_state.page = "📝 Data Configuration"
 if 'compare_models' not in st.session_state:
@@ -93,6 +90,32 @@ def compute_high_risk_baselines(data):
             }
     return None
 
+# Generate patterns for a dataset
+def generate_patterns(data, dataset_name):
+    patterns = []
+    high_risk = data[data["CA_Status"] == "CA"]
+    if not high_risk.empty:
+        patterns.append({
+            "pattern": f"Average Attendance: {high_risk['Attendance_Percentage'].mean():.2f}%",
+            "explanation": "Low attendance is a strong indicator of chronic absenteeism."
+        })
+        if not high_risk["Grade"].mode().empty:
+            patterns.append({
+                "pattern": f"Common Grades: {', '.join(map(str, high_risk['Grade'].mode().tolist()))}",
+                "explanation": "Certain grades have higher CA rates."
+            })
+        if not high_risk["Meal_Code"].mode().empty:
+            patterns.append({
+                "pattern": f"Common Meal Codes: {', '.join(high_risk['Meal_Code'].mode().tolist())}",
+                "explanation": "Meal code status may correlate with absenteeism."
+            })
+        if not high_risk["Transportation"].mode().empty:
+            patterns.append({
+                "pattern": f"Common Transportation: {', '.join(high_risk['Transportation'].mode().tolist())}",
+                "explanation": "Transportation type may influence attendance."
+            })
+    return patterns
+
 # Page 1: Data Configuration
 if st.session_state.page == "📝 Data Configuration":
     st.markdown("""
@@ -114,6 +137,7 @@ if st.session_state.page == "📝 Data Configuration":
             try:
                 data = pd.read_csv(uploaded_file)
                 st.session_state.datasets[dataset_name] = data
+                st.session_state.patterns[dataset_name] = generate_patterns(data, dataset_name)
                 st.success(f"Dataset '{dataset_name}' uploaded successfully!")
             except Exception as e:
                 st.error(f"Error uploading data: {str(e)}")
@@ -228,7 +252,6 @@ if st.session_state.page == "📝 Data Configuration":
     generate_disabled = not (gender_dist is not None and attendance_valid and academic_perf_valid and suspensions_valid and drop_off_rules_valid)
     if st.button("Generate Historical Data", disabled=generate_disabled):
         try:
-            st.session_state.patterns = []
             custom_fields = [(f["name"], f["values"]) for f in st.session_state.custom_fields if f["name"] and f["values"]]
             st.session_state.drop_off_rules = drop_off_rules
             data = generate_historical_data(
@@ -238,6 +261,7 @@ if st.session_state.page == "📝 Data Configuration":
                 custom_fields, id_length, dropoff_percent, drop_off_rules
             )
             st.session_state.datasets[dataset_name] = data
+            st.session_state.patterns[dataset_name] = generate_patterns(data, dataset_name)
             st.session_state.high_risk_baselines = compute_high_risk_baselines(data)
             st.success(f"Dataset '{dataset_name}' generated successfully!")
             
@@ -270,8 +294,19 @@ elif st.session_state.page == "🤖 Model Training":
         data = st.session_state.datasets[selected_dataset]
         
         st.subheader("Target Selection")
-        target_options = ["CA_Status", "Drop_Off"]
-        targets = st.multiselect("Select Target Variables", target_options, default=["CA_Status"])
+        # Dynamically identify binary/categorical columns for targets
+        target_options = [
+            col for col in data.columns
+            if col not in ["Student_ID", "Year", "Attendance_Percentage", "Present_Days", "Absent_Days", "Academic_Performance", "Suspensions"]
+            and data[col].nunique() <= 10  # Limit to columns with few unique values
+            and data[col].dtype == "object" or data[col].isin(["Y", "N", "CA", "Non-CA"]).all()
+        ]
+        if not target_options:
+            target_options = ["CA_Status", "Drop_Off"]
+        targets = st.multiselect("Select Target Variables", target_options, default=["CA_Status"] if "CA_Status" in target_options else target_options[:1])
+        
+        if not targets:
+            st.error("Please select at least one target variable.")
         
         st.subheader("Feature Selection")
         excluded_features = ["Student_ID"] + target_options
@@ -298,7 +333,6 @@ elif st.session_state.page == "🤖 Model Training":
         model_options = ["Logistic Regression", "Random Forest", "Decision Tree", "SVM", "Gradient Boosting", "Neural Network"]
         models_to_train = st.multiselect("Select Models", model_options, default=["Random Forest"])
         
-        # Model recommendation
         recommended_model = "Random Forest" if len(targets) > 1 else "Logistic Regression"
         st.info(f"Recommended Model: {recommended_model} (based on {'multi-target' if len(targets) > 1 else 'single-target'} learning)")
         model_available = recommended_model in st.session_state.models
@@ -309,23 +343,21 @@ elif st.session_state.page == "🤖 Model Training":
             st.subheader("Customize Hyperparameter Tuning")
             for model_name in models_to_train:
                 st.write(f"**{model_name} Parameters**")
-                if model_name == "Logistic Regression":
+                if model_name == "Random Forest":
                     tuning_params[model_name] = {
-                        "estimator__C": st.multiselect(f"C values ({model_name})", [0.1, 1, 10], default=[0.1, 1, 10]),
-                        "estimator__solver": st.multiselect(f"Solver ({model_name})", ["lbfgs", "liblinear"], default=["lbfgs", "liblinear"])
-                    }
-                elif model_name == "Random Forest":
-                    tuning_params[model_name] = {
-                        "estimator__n_estimators": st.multiselect(f"N Estimators ({model_name})", [100, 200], default=[100, 200]),
-                        "estimator__max_depth": st.multiselect(f"Max Depth ({model_name})", [None, 10, 20], default=[None, 10, 20])
+                        "n_estimators": st.multiselect(f"N Estimators ({model_name})", [100, 200], default=[100, 200]),
+                        "max_depth": st.multiselect(f"Max Depth ({model_name})", [None, 10, 20], default=[None, 10, 20])
                     }
                 # Add other models as needed
         
-        if st.button("Train Models"):
+        if st.button("Train Models", disabled=not targets):
             try:
                 with st.spinner("Training models..."):
                     X = data[features]
                     y = data[targets]
+                    if y.empty or y.isnull().all().all():
+                        raise ValueError("Target variable(s) contain no valid data.")
+                    
                     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
                     
                     preprocessor = ColumnTransformer(
@@ -344,31 +376,23 @@ elif st.session_state.page == "🤖 Model Training":
                     for model_name in models_to_train:
                         status = st.empty()
                         status.write(f"Training {model_name}...")
-                        model = MultiOutputClassifier(train_model(model_name, None, None, None, None)[0]) if len(targets) > 1 else train_model(model_name, None, None, None, None)[0]
-                        pipeline = Pipeline([("preprocessor", preprocessor), ("estimator", model)])
-                        pipeline.fit(X_train, y_train)
-                        
-                        y_pred = pipeline.predict(X_test)
-                        metrics = {}
-                        for i, target in enumerate(targets):
-                            metrics[target] = {
-                                "accuracy": accuracy_score(y_test[target], y_pred[:, i] if len(targets) > 1 else y_pred),
-                                "precision": precision_score(y_test[target], y_pred[:, i] if len(targets) > 1 else y_pred, pos_label="CA" if target == "CA_Status" else "Y"),
-                                "recall": recall_score(y_test[target], y_pred[:, i] if len(targets) > 1 else y_pred, pos_label="CA" if target == "CA_Status" else "Y"),
-                                "f1": f1_score(y_test[target], y_pred[:, i] if len(targets) > 1 else y_pred, pos_label="CA" if target == "CA_Status" else "Y"),
-                            }
+                        if enable_tuning and model_name in tuning_params:
+                            model, metrics = tune_model(model_name, X_train_processed, y_train, X_test_processed, y_test, tuning_params[model_name])
+                        else:
+                            model, metrics = train_model(model_name, X_train_processed, y_train, X_test_processed, y_test)
                         
                         version_id = str(uuid.uuid4())
                         st.session_state.model_versions.setdefault(model_name, []).append({
                             "version_id": version_id,
                             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             "metrics": metrics,
-                            "model": pipeline,
+                            "model": model,
                             "feature_names": feature_names
                         })
-                        st.session_state.models[model_name] = {"model": pipeline, "metrics": metrics, "feature_names": feature_names}
+                        st.session_state.models[model_name] = {"model": model, "metrics": metrics, "feature_names": feature_names}
                         status.success(f"{model_name} trained successfully!")
                     
+                    st.session_state.patterns[selected_dataset] = generate_patterns(data, selected_dataset)
                     st.success("All models trained successfully!")
             except Exception as e:
                 st.error(f"Error training models: {str(e)}")
@@ -382,6 +406,7 @@ elif st.session_state.page == "🤖 Model Training":
                     st.write(f"Accuracy: {metrics['accuracy']:.2f}, Precision: {metrics['precision']:.2f}, Recall: {metrics['recall']:.2f}, F1: {metrics['f1']:.2f}")
         
         st.subheader("Pattern Discovery")
+        dataset_filter = st.multiselect("Filter Patterns by Dataset", list(st.session_state.datasets.keys()), default=list(st.session_state.datasets.keys()))
         with st.expander("Add New Pattern", expanded=False):
             st.markdown("""
             **How to Add a New Pattern**
@@ -401,15 +426,25 @@ elif st.session_state.page == "🤖 Model Training":
             """)
             new_pattern = st.text_input("New Pattern")
             pattern_explanation = st.text_input("Pattern Explanation")
+            pattern_dataset = st.selectbox("Add Pattern to Dataset", list(st.session_state.datasets.keys()))
             if st.button("Add Pattern"):
-                if new_pattern and pattern_explanation:
-                    st.session_state.patterns.append({"pattern": new_pattern, "explanation": pattern_explanation})
-                    st.success("Pattern added!")
+                if new_pattern and pattern_explanation and pattern_dataset:
+                    st.session_state.patterns.setdefault(pattern_dataset, []).append({
+                        "pattern": new_pattern,
+                        "explanation": pattern_explanation
+                    })
+                    st.success(f"Pattern added to '{pattern_dataset}'!")
         
-        if st.session_state.patterns:
+        if dataset_filter and any(st.session_state.patterns.get(ds) for ds in dataset_filter):
             st.write("**Learned Patterns**")
-            for p in st.session_state.patterns:
-                st.write(f"- {p['pattern']}: {p['explanation']}")
+            for ds in dataset_filter:
+                patterns = st.session_state.patterns.get(ds, [])
+                if patterns:
+                    st.write(f"**{ds}**")
+                    for p in patterns:
+                        st.write(f"- {p['pattern']}: {p['explanation']}")
+        else:
+            st.info("No patterns available for selected datasets.")
 
 # Page 3: Results
 elif st.session_state.page == "📊 Results":
@@ -564,16 +599,15 @@ elif st.session_state.page == "📊 Results":
             try:
                 model_info = st.session_state.models[selected_model]
                 X = st.session_state.current_data[features]
-                predictions = model_info["model"].predict(X)
-                prediction_data = st.session_state.current_data.copy()
+                X_processed = model_info["model"].named_steps["preprocessor"].transform(X)
+                predictions = model_info["model"].named_steps["estimator"].predict(X_processed)
+                probabilities = model_info["model"].named_steps["estimator"].predict_proba(X_processed)
                 
-                if isinstance(predictions, np.ndarray) and predictions.shape[1] > 1:
-                    for i, target in enumerate(model_info["metrics"].keys()):
-                        prediction_data[f"{target}_Prediction"] = predictions[:, i]
-                        prediction_data[f"{target}_Probability"] = model_info["model"].predict_proba(X)[:, 1]
-                else:
-                    prediction_data["CA_Prediction"] = predictions
-                    prediction_data["CA_Probability"] = model_info["model"].predict_proba(X)[:, 1]
+                prediction_data = st.session_state.current_data.copy()
+                target_names = list(model_info["metrics"].keys())
+                for i, target in enumerate(target_names):
+                    prediction_data[f"{target}_Prediction"] = predictions[:, i] if len(target_names) > 1 else predictions
+                    prediction_data[f"{target}_Probability"] = probabilities[i][:, 1] if len(target_names) > 1 else probabilities[:, 1]
                 
                 def apply_prediction_drop_off_rules(row):
                     if row.get("CA_Prediction", "Non-CA") != "CA":
@@ -592,16 +626,17 @@ elif st.session_state.page == "📊 Results":
                 def identify_causes(row):
                     causes = []
                     if row.get("CA_Prediction", "Non-CA") == "CA":
-                        for pattern in st.session_state.patterns:
-                            pattern_text = pattern["pattern"].lower()
-                            if "attendance" in pattern_text and row["Attendance_Percentage"] < (st.session_state.high_risk_baselines["Attendance_Percentage"] if st.session_state.high_risk_baselines else 80):
-                                causes.append(pattern["pattern"])
-                            if "grade" in pattern_text and str(row["Grade"]) in pattern_text:
-                                causes.append(pattern["pattern"])
-                            if "transportation" in pattern_text and row["Transportation"] in pattern_text:
-                                causes.append(pattern["pattern"])
-                            if "suspensions" in pattern_text and row["Suspensions"] > (st.session_state.high_risk_baselines["Suspensions"] if st.session_state.high_risk_baselines else 0):
-                                causes.append(pattern["pattern"])
+                        for ds, patterns in st.session_state.patterns.items():
+                            for pattern in patterns:
+                                pattern_text = pattern["pattern"].lower()
+                                if "attendance" in pattern_text and row["Attendance_Percentage"] < (st.session_state.high_risk_baselines["Attendance_Percentage"] if st.session_state.high_risk_baselines else 80):
+                                    causes.append(pattern["pattern"])
+                                if "grade" in pattern_text and str(row["Grade"]) in pattern_text:
+                                    causes.append(pattern["pattern"])
+                                if "transportation" in pattern_text and row["Transportation"] in pattern_text:
+                                    causes.append(pattern["pattern"])
+                                if "suspensions" in pattern_text and row["Suspensions"] > (st.session_state.high_risk_baselines["Suspensions"] if st.session_state.high_risk_baselines else 0):
+                                    causes.append(pattern["pattern"])
                     return ", ".join(causes) if causes else "None"
                 
                 prediction_data["Prediction_Causes"] = prediction_data.apply(identify_causes, axis=1)
@@ -777,6 +812,7 @@ elif st.session_state.page == "📊 Results":
                     labels={"color": "Normalized CA Probability"}, color_continuous_scale="Reds"
                 )
                 fig.update_traces(hovertemplate="Grade: %{y}<br>School: %{x}<br>Dataset: %{zaxis}<br>CA Probability: %{z:.2f}")
+                st.plotly_chart(fig)
         
         st.subheader("Single Student Analysis")
         if "CA_Prediction" in st.session_state.current_data.columns:
