@@ -95,7 +95,7 @@ if st.session_state.page == "📝 Data Configuration":
     num_students = st.slider("Number of Students", 100, 5000, 1000)
     year_start, year_end = st.slider("Academic Years", 2020, 2025, (2020, 2024), step=1)
     school_prefix = st.text_input("School Prefix (e.g., 10U)", "10U001")
-    num_schools = st.number_input("Number of Schools", 1, 10, 3)
+    num_schools = st.number_input("Number of Schools", 1, 50,5)
     id_length = st.radio("Student ID Length", [5, 7], index=0)
     dropoff_percent = st.slider("Target Drop Off Percentage (%)", 0, 50, 2, step=5, help="Percentage of students with CA Status = CA")
     
