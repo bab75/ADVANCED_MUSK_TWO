@@ -10,67 +10,70 @@ from data_processing import preprocess_data
 
 def train_and_tune_model(data, features, targets, models_to_train, enable_tuning, tuning_params):
     """Train and tune models for multi-target learning."""
-    X = data[features]
-    y = data[targets]
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    
-    categorical_cols = [col for col in features if data[col].dtype == "object"]
-    numerical_cols = [col for col in features if col not in categorical_cols]
-    
-    X_train_processed, preprocessor, feature_names = preprocess_data(X_train, categorical_cols, numerical_cols)
-    X_test_processed = preprocessor.transform(X_test)
-    
-    models = {}
-    model_versions = {}
-    patterns = []
-    
-    for model_name in models_to_train:
-        try:
-            if enable_tuning and model_name in tuning_params:
-                model, metrics, best_params = tune_model(
-                    model_name, X_train_processed, y_train, X_test_processed, y_test, tuning_params[model_name]
-                )
-            else:
-                model, metrics = train_model(model_name, X_train_processed, y_train, X_test_processed, y_test)
-                best_params = None
-            
-            version_id = str(uuid.uuid4())
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
-            model_versions.setdefault(model_name, []).append({
-                "version_id": version_id,
-                "timestamp": timestamp,
-                "metrics": metrics,
-                "best_params": best_params,
-                "model": model,
-                "preprocessor": preprocessor,
-                "feature_names": feature_names,
-                "y_test": y_test,
-                "y_pred": metrics["y_pred"],
-                "X_test_processed": X_test_processed
-            })
-            
-            models[model_name] = {
-                "model": model,
-                "metrics": metrics,
-                "preprocessor": preprocessor,
-                "feature_names": feature_names,
-                "best_params": best_params,
-                "y_test": y_test,
-                "y_pred": metrics["y_pred"],
-                "X_test_processed": X_test_processed
-            }
-            
-            high_risk = data[data["CA_Status"] == "CA"]
-            if not high_risk.empty:
-                patterns.extend([
-                    {"pattern": f"Average Attendance: {high_risk['Attendance_Percentage'].mean():.2f}%", "explanation": "Identified in high-risk students"},
-                    {"pattern": f"Common Grades: {', '.join(map(str, high_risk['Grade'].mode().tolist()))}", "explanation": "Identified in high-risk students"}
-                ])
-        except Exception as e:
-            raise ValueError(f"Error training {model_name}: {str(e)}")
-    
-    return {"models": models, "model_versions": model_versions}, patterns
+    try:
+        X = data[features]
+        y = data[targets]
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        
+        categorical_cols = [col for col in features if data[col].dtype == "object"]
+        numerical_cols = [col for col in features if col not in categorical_cols]
+        
+        X_train_processed, preprocessor, feature_names = preprocess_data(X_train, categorical_cols, numerical_cols)
+        X_test_processed = preprocessor.transform(X_test)
+        
+        models = {}
+        model_versions = {}
+        patterns = []
+        
+        for model_name in models_to_train:
+            try:
+                if enable_tuning and model_name in tuning_params:
+                    model, metrics, best_params = tune_model(
+                        model_name, X_train_processed, y_train, X_test_processed, y_test, tuning_params[model_name]
+                    )
+                else:
+                    model, metrics = train_model(model_name, X_train_processed, y_train, X_test_processed, y_test)
+                    best_params = None
+                
+                version_id = str(uuid.uuid4())
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
+                model_versions.setdefault(model_name, []).append({
+                    "version_id": version_id,
+                    "timestamp": timestamp,
+                    "metrics": metrics,
+                    "best_params": best_params,
+                    "model": model,
+                    "preprocessor": preprocessor,
+                    "feature_names": feature_names,
+                    "y_test": y_test,
+                    "y_pred": metrics["y_pred"],
+                    "X_test_processed": X_test_processed
+                })
+                
+                models[model_name] = {
+                    "model": model,
+                    "metrics": metrics,
+                    "preprocessor": preprocessor,
+                    "feature_names": feature_names,
+                    "best_params": best_params,
+                    "y_test": y_test,
+                    "y_pred": metrics["y_pred"],
+                    "X_test_processed": X_test_processed
+                }
+                
+                high_risk = data[data["CA_Status"] == "CA"]
+                if not high_risk.empty:
+                    patterns.extend([
+                        {"pattern": f"Average Attendance: {high_risk['Attendance_Percentage'].mean():.2f}%", "explanation": "Identified in high-risk students"},
+                        {"pattern": f"Common Grades: {', '.join(map(str, high_risk['Grade'].mode().tolist()))}", "explanation": "Identified in high-risk students"}
+                    ])
+            except Exception as e:
+                raise ValueError(f"Error training {model_name}: {str(e)}")
+        
+        return {"models": models, "model_versions": model_versions}, patterns
+    except Exception as e:
+        raise ValueError(f"Error in model training pipeline: {str(e)}")
 
 def run_predictions(data, features, selected_model, models, drop_off_rules, patterns, high_risk_baselines):
     """Run predictions on current-year data."""
