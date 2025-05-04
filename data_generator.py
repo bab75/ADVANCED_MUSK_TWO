@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import uuid
 
-def generate_historical_data(num_students, year_start, year_end, school_prefix, num_schools, grades, gender_dist, meal_codes, academic_perf, present_days_range, absent_days_range, total_days, custom_fields):
+def generate_historical_data(num_students, year_start, year_end, school_prefix, num_schools, grades, gender_dist, meal_codes, academic_perf, transportation, suspensions_range, present_days_range, absent_days_range, total_days, custom_fields):
     data = []
     schools = [f"{school_prefix}{i}" for i in range(1, num_schools + 1)]
     used_ids = set()  # Track used IDs to ensure uniqueness
@@ -14,6 +14,8 @@ def generate_historical_data(num_students, year_start, year_end, school_prefix, 
         gender = np.random.choice(["M", "F", "O"], p=np.array(gender_dist)/100)
         meal_code = np.random.choice(meal_codes)
         academic_performance = np.random.randint(academic_perf[0], academic_perf[1] + 1)
+        transport = np.random.choice(transportation)
+        suspensions = np.random.randint(suspensions_range[0], suspensions_range[1] + 1)
         
         # Generate present and absent days within constraints
         present_days = np.random.randint(present_days_range[0], present_days_range[1] + 1)
@@ -45,6 +47,8 @@ def generate_historical_data(num_students, year_start, year_end, school_prefix, 
             "Gender": gender,
             "Meal_Code": meal_code,
             "Academic_Performance": academic_performance,
+            "Transportation": transport,
+            "Suspensions": suspensions,
             "Present_Days": present_days,
             "Absent_Days": absent_days,
             "Attendance_Percentage": attendance_percentage,
@@ -59,7 +63,7 @@ def generate_historical_data(num_students, year_start, year_end, school_prefix, 
     
     return pd.DataFrame(data)
 
-def generate_current_year_data(num_students, school_prefix, num_schools, grades, gender_dist, meal_codes, academic_perf, present_days_range, absent_days_range, total_days, custom_fields):
+def generate_current_year_data(num_students, school_prefix, num_schools, grades, gender_dist, meal_codes, academic_perf, transportation, suspensions_range, present_days_range, absent_days_range, total_days, custom_fields):
     data = []
     schools = [f"{school_prefix}{i}" for i in range(1, num_schools + 1)]
     current_year = 2025
@@ -70,6 +74,8 @@ def generate_current_year_data(num_students, school_prefix, num_schools, grades,
         gender = np.random.choice(["M", "F", "O"], p=np.array(gender_dist)/100)
         meal_code = np.random.choice(meal_codes)
         academic_performance = np.random.randint(academic_perf[0], academic_perf[1] + 1)
+        transport = np.random.choice(transportation)
+        suspensions = np.random.randint(suspensions_range[0], suspensions_range[1] + 1)
         
         # Generate present and absent days within constraints
         present_days = np.random.randint(present_days_range[0], present_days_range[1] + 1)
@@ -95,6 +101,8 @@ def generate_current_year_data(num_students, school_prefix, num_schools, grades,
             "Gender": gender,
             "Meal_Code": meal_code,
             "Academic_Performance": academic_performance,
+            "Transportation": transport,
+            "Suspensions": suspensions,
             "Present_Days": present_days,
             "Absent_Days": absent_days,
             "Attendance_Percentage": attendance_percentage
