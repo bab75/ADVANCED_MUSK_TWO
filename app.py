@@ -34,7 +34,7 @@ def clear_session_state():
     st.session_state.selected_student_id = None
     st.session_state.model_versions = {}
     st.session_state.patterns = []
-    st.session_state.page = "Data Configuration"
+    st.session_state.page = "📝 Data Configuration"
 
 # Initialize session state
 if 'data' not in st.session_state:
@@ -54,42 +54,21 @@ if 'model_versions' not in st.session_state:
 if 'patterns' not in st.session_state:
     st.session_state.patterns = []
 if 'page' not in st.session_state:
-    st.session_state.page = "Data Configuration"
+    st.session_state.page = "📝 Data Configuration"
 
 # Sidebar navigation with radio buttons
 st.sidebar.title("Navigation")
-st.sidebar.markdown("""
-<div class="nav-icon">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 24px; height: 24px; margin-right: 10px;">
-        <path d="M3 3h18v18H3V3zm2 2v14h14V5H5zm2 2h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/>
-    </svg>
-    📝 Data Configuration
-</div>
-<div class="nav-icon">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 24px; height: 24px; margin-right: 10px;">
-        <path d="M12 2a10 10 0 00-8 4v2h2v2H4v2h2v2H4v2h2v2h2a10 10 0 008-4 10 10 0 008 4h2v-2h-2v-2h2v-2h-2v-2h2V8h-2V6a10 10 0 00-8-4zm0 2a8 8 0 016.32 3H17v2h-2v2h2v2h-2v2h2v2h-1.32A8 8 0 0112 20a8 8 0 01-6.32-3H7v-2H5v-2h2v-2H5V9h2V7h1.32A8 8 0 0112 4z"/>
-    </svg>
-    🤖 Model Training
-</div>
-<div class="nav-icon">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 24px; height: 24px; margin-right: 10px;">
-        <path d="M3 3h18v18H3V3zm2 2v14h14V5H5zm2 2h2v6H7V7zm4 0h2v10h-2V7zm4 0h2v4h-2V7z"/>
-    </svg>
-    📊 Results
-</div>
-<div class="nav-icon">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 24px; height: 24px; margin-right: 10px;">
-        <path d="M4 3h16a2 2 0 012 2v14a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2zm1 2v14h14V5H5zm2 2h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/>
-    </svg>
-    📚 Documentation
-</div>
-""", unsafe_allow_html=True)
-page = st.sidebar.radio("Go to", [
+page_options = [
     "📝 Data Configuration",
     "🤖 Model Training",
     "📊 Results",
     "📚 Documentation"
-], index=["📝 Data Configuration", "🤖 Model Training", "📊 Results", "📚 Documentation"].index(st.session_state.page), label_visibility="collapsed")
+]
+# Ensure valid index for radio button
+default_index = 0
+if st.session_state.page in page_options:
+    default_index = page_options.index(st.session_state.page)
+page = st.sidebar.radio("Go to", page_options, index=default_index, label_visibility="collapsed")
 st.session_state.page = page
 
 # Clear All Data Button
@@ -172,6 +151,8 @@ if st.session_state.page == "📝 Data Configuration":
     # Generate Data
     if st.button("Generate Historical Data") and gender_dist is not None and attendance_valid:
         try:
+            # Clear patterns when generating new data
+            st.session_state.patterns = []
             custom_fields = [(f["name"], f["values"]) for f in st.session_state.custom_fields if f["name"] and f["values"]]
             data = generate_historical_data(
                 num_students, year_start, year_end, school_prefix, num_schools,
@@ -211,6 +192,7 @@ elif st.session_state.page == "🤖 Model Training":
         if uploaded_file:
             try:
                 st.session_state.data = pd.read_csv(uploaded_file)
+                st.session_state.patterns = []  # Clear patterns for new data
                 st.success("Data uploaded successfully!")
             except Exception as e:
                 st.error(f"Error uploading data: {str(e)}")
@@ -434,7 +416,7 @@ elif st.session_state.page == "🤖 Model Training":
                             
                             # Feature Importance (if applicable)
                             if model_name in ["Random Forest", "Decision Tree", "Gradient Boosting"]:
-                                fig = plot_feature_importance(model_info["model"], feature_names)
+                                fig = plot_feature_importance(model_info["model"], model_info["feature_names"])
                                 st.plotly_chart(fig)
                             
                             # Model Explanation with Example
@@ -448,18 +430,22 @@ elif st.session_state.page == "🤖 Model Training":
             high_risk = st.session_state.data[st.session_state.data["CA_Status"] == "CA"]
             if not high_risk.empty:
                 patterns = []
-                low_attendance = high_risk["Attendance_Percentage"].mean()
-                common_grades = high_risk["Grade"].mode().tolist()
-                common_meal_codes = high_risk["Meal_Code"].mode().tolist()
-                common_transport = high_risk["Transportation"].mode().tolist()
-                patterns.append(f"Average Attendance: {low_attendance:.2f}%")
-                patterns.append(f"Common Grades: {', '.join(map(str, common_grades))}")
-                patterns.append(f"Common Meal Codes: {', '.join(common_meal_codes)}")
-                patterns.append(f"Common Transportation: {', '.join(common_transport)}")
-                st.session_state.patterns.extend([{"pattern": p, "explanation": f"Identified in high-risk students (CA Status = CA)"} for p in patterns])
-                st.write(f"Number of patterns learned: {len(st.session_state.patterns)}")
-                for pattern in st.session_state.patterns:
-                    st.write(f"- {pattern['pattern']}: {pattern['explanation']}")
+                low_attendance = f"Average Attendance: {high_risk['Attendance_Percentage'].mean():.2f}%"
+                common_grades = f"Common Grades: {', '.join(map(str, high_risk['Grade'].mode().tolist()))}"
+                common_meal_codes = f"Common Meal Codes: {', '.join(high_risk['Meal_Code'].mode().tolist())}"
+                common_transport = f"Common Transportation: {', '.join(high_risk['Transportation'].mode().tolist())}"
+                
+                # Check for duplicates before adding
+                existing_patterns = [p["pattern"] for p in st.session_state.patterns]
+                for pattern in [low_attendance, common_grades, common_meal_codes, common_transport]:
+                    if pattern not in existing_patterns:
+                        patterns.append({"pattern": pattern, "explanation": "Identified in high-risk students (CA Status = CA)"})
+                
+                if patterns:
+                    st.session_state.patterns.extend(patterns)
+                    st.write(f"Number of patterns learned: {len(st.session_state.patterns)}")
+                    for pattern in patterns:
+                        st.write(f"- {pattern['pattern']}: {pattern['explanation']}")
 
 # Page 3: Results
 elif st.session_state.page == "📊 Results":
@@ -704,17 +690,18 @@ elif st.session_state.page == "📚 Documentation":
         if not high_risk.empty:
             st.subheader("Discovered Patterns")
             if st.session_state.patterns:
-                for i, pattern in enumerate(st.session_state.patterns):
-                    col1, col2, col3 = st.columns([4, 1, 1])
-                    with col1:
-                        st.write(f"- {pattern['pattern']}: {pattern['explanation']}")
-                    with col2:
-                        if st.button("Edit", key=f"edit_pattern_{i}"):
-                            st.session_state.edit_pattern_index = i
-                    with col3:
-                        if st.button("Delete", key=f"delete_pattern_{i}"):
-                            st.session_state.patterns.pop(i)
-                            st.experimental_rerun()
+                with st.expander("View Discovered Patterns", expanded=False):
+                    for i, pattern in enumerate(st.session_state.patterns):
+                        col1, col2, col3 = st.columns([4, 1, 1])
+                        with col1:
+                            st.write(f"- {pattern['pattern']}: {pattern['explanation']}")
+                        with col2:
+                            if st.button("Edit", key=f"edit_pattern_{i}"):
+                                st.session_state.edit_pattern_index = i
+                        with col3:
+                            if st.button("Delete", key=f"delete_pattern_{i}"):
+                                st.session_state.patterns.pop(i)
+                                st.experimental_rerun()
                 
                 # Edit Pattern
                 if 'edit_pattern_index' in st.session_state:
