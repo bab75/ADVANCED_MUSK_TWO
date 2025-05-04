@@ -42,7 +42,6 @@ def train_model(model_name, X_train, y_train, X_test, y_test):
 def tune_model(model_name, X_train, y_train, X_test, y_test, custom_params=None):
     param_grid = custom_params if custom_params else {}
     
-    # Initialize model and default param_grid based on model_name
     if model_name == "Logistic Regression":
         model = LogisticRegression(max_iter=1000, random_state=42)
         if not param_grid:
@@ -128,7 +127,8 @@ def plot_feature_importance(model, feature_names):
         fig = go.Figure()
         fig.add_trace(go.Bar(
             x=[feature_names[i] for i in indices],
-            y=importances[indices]
+            y=importances[indices],
+            marker_color="#3498db"
         ))
         fig.update_layout(title="Feature Importance", xaxis_title="Feature", yaxis_title="Importance")
         return fig
