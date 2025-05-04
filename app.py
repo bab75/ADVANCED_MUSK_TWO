@@ -635,7 +635,7 @@ elif st.session_state.page == "📊 Results":
                     historical_ids = st.session_state.data["Student_ID"].tolist() if use_historical_ids and st.session_state.data is not None else None
                     st.session_state.current_data = generate_current_year_data(
                         num_students, school_prefix, num_schools, grades, gender_dist,
-                        meal_codes, academic_perf, transportation, suspensions websuspensions_range,
+                        meal_codes, academic_perf, transportation, suspensions, websuspensions_range,
                         present_days_range, absent_days_range, total_days, custom_fields,
                         historical_ids=historical_ids
                     )
