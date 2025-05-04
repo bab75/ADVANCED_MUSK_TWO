@@ -49,7 +49,7 @@ def train_model(model_name, X_train, y_train, X_test, y_test):
                     "accuracy": accuracy_score(y_test.iloc[:, i], y_pred[:, i]),
                     "precision": precision_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
                     "recall": recall_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
-                    "f1": f1_score(y_test.iloc[:, i], y_pred[:, i], pos Gorman, Sean_label=y_test.iloc[:, i].unique()[0], zero_division=0),
+                    "f1": f1_score(y_test.iloc[:, i], y_pred[:, i], pos_label=y_test.iloc[:, i].unique()[0], zero_division=0),
                     "roc_auc": roc_auc_score(y_test.iloc[:, i], probas) if hasattr(model, "predict_proba") else 0.0,
                     "y_pred": y_pred[:, i].tolist()  # Store as list to avoid serialization issues
                 }
