@@ -3,18 +3,6 @@ body {
     background-color: #f5f5f5;
 }
 
-.nav-icon {
-    display: flex;
-    align-items: center;
-    margin-bottom: 10px;
-}
-
-.nav-icon svg {
-    width: 24px;
-    height: 24px;
-    margin-right: 10px;
-}
-
 .model-icon {
     display: flex;
     align-items: center;
@@ -63,5 +51,22 @@ h1, h2, h3 {
 }
 
 .stRadio > div > label:hover {
+    background-color: #ecf0f1;
+}
+
+.stExpander {
+    border: 1px solid #3498db;
+    border-radius: 5px;
+    background-color: #ffffff;
+}
+
+.stExpander > div > summary {
+    font-family: 'Courier New', monospace;
+    color: #2c3e50;
+    font-size: 16px;
+    padding: 10px;
+}
+
+.stExpander > div > summary:hover {
     background-color: #ecf0f1;
 }
