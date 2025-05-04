@@ -8,10 +8,11 @@ from sklearn.model_selection import GridSearchCV
 import numpy as np
 import plotly.graph_objects as go
 from sklearn.multioutput import MultiOutputClassifier
+from sklearn.pipeline import Pipeline
 
-def train_model(model_name, X_train, y_train, X_test, y_test):
+def train_model(model_name, X_train, y_train, X_test, y_test, preprocessor):
     """
-    Train a specified model and compute metrics.
+    Train a specified model with a preprocessor and compute metrics.
     """
     if model_name == "Logistic Regression":
         model = LogisticRegression(max_iter=1000)
@@ -32,9 +33,14 @@ def train_model(model_name, X_train, y_train, X_test, y_test):
     if isinstance(y_train, pd.DataFrame) and y_train.shape[1] > 1:
         model = MultiOutputClassifier(model)
     
-    model.fit(X_train, y_train)
+    pipeline = Pipeline([
+        ("preprocessor", preprocessor),
+        ("estimator", model)
+    ])
     
-    y_pred = model.predict(X_test)
+    pipeline.fit(X_train, y_train)
+    
+    y_pred = pipeline.predict(X_test)
     metrics = {}
     
     if isinstance(y_test, pd.DataFrame):
@@ -53,18 +59,23 @@ def train_model(model_name, X_train, y_train, X_test, y_test):
             "f1": f1_score(y_test, y_pred, pos_label="CA", zero_division=0),
         }
     
-    return Pipeline([("preprocessor", None), ("estimator", model)]), metrics
+    return pipeline, metrics
 
-def tune_model(model_name, X_train, y_train, X_test, y_test, param_grid):
+def tune_model(model_name, X_train, y_train, X_test, y_test, param_grid, preprocessor):
     """
-    Tune a model using GridSearchCV.
+    Tune a model using GridSearchCV with a preprocessor.
     """
-    base_model = train_model(model_name, X_train, y_train, X_test, y_test)[0].named_steps["estimator"]
+    base_model = train_model(model_name, X_train, y_train, X_test, y_test, preprocessor)[0].named_steps["estimator"]
     grid_search = GridSearchCV(base_model, param_grid, cv=5, scoring="f1", n_jobs=-1)
-    grid_search.fit(X_train, y_train)
     
-    best_model = grid_search.best_estimator_
-    y_pred = best_model.predict(X_test)
+    pipeline = Pipeline([
+        ("preprocessor", preprocessor),
+        ("estimator", grid_search)
+    ])
+    
+    pipeline.fit(X_train, y_train)
+    
+    y_pred = pipeline.predict(X_test)
     metrics = {}
     
     if isinstance(y_test, pd.DataFrame):
@@ -83,7 +94,7 @@ def tune_model(model_name, X_train, y_train, X_test, y_test, param_grid):
             "f1": f1_score(y_test, y_pred, pos_label="CA", zero_division=0),
         }
     
-    return Pipeline([("preprocessor", None), ("estimator", best_model)]), metrics
+    return pipeline, metrics
 
 def get_model_explanation(model_name, X_sample, model):
     """
@@ -108,8 +119,9 @@ def plot_feature_importance(model, feature_names):
     """
     Plot feature importance for tree-based models.
     """
-    if hasattr(model.named_steps["estimator"], "feature_importances_"):
-        importances = model.named_steps["estimator"].feature_importances_
+    estimator = model.named_steps["estimator"]
+    if hasattr(estimator, "feature_importances_"):
+        importances = estimator.feature_importances_
         fig = go.Figure(data=[
             go.Bar(x=feature_names, y=importances)
         ])
