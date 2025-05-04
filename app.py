@@ -146,14 +146,17 @@ if st.session_state.page == "📝 Data Configuration":
         if max_absent_days <= 0:
             st.error(f"Error: Minimum present days ({present_days_range[0]}) equals or exceeds total days ({total_days}). Reduce minimum present days.")
             attendance_valid = False
+        elif present_days_range[0] >= present_days_range[1]:
+            st.error(f"Error: Minimum present days ({present_days_range[0]}) must be less than maximum present days ({present_days_range[1]}).")
+            attendance_valid = False
+        elif absent_days_range[0] >= absent_days_range[1]:
+            st.error(f"Error: Minimum absent days ({absent_days_range[0]}) must be less than maximum absent days ({absent_days_range[1]}).")
+            attendance_valid = False
         elif present_days_range[0] + absent_days_range[1] > total_days:
             st.error(f"Error: Minimum present days ({present_days_range[0]}) plus maximum absent days ({absent_days_range[1]}) exceeds total days ({total_days}). Reduce absent days range.")
             attendance_valid = False
         elif present_days_range[1] + absent_days_range[0] < total_days:
             st.error(f"Error: Maximum present days ({present_days_range[1]}) plus minimum absent days ({absent_days_range[0]}) is less than total days ({total_days}). Increase present or absent days range.")
-            attendance_valid = False
-        elif present_days_range[1] < present_days_range[0] or absent_days_range[1] < absent_days_range[0]:
-            st.error("Error: Range maximum must be greater than or equal to minimum.")
             attendance_valid = False
         elif total_days - present_days_range[0] < absent_days_range[0]:
             st.error(f"Error: Maximum possible absent days ({total_days - present_days_range[0]}) is less than minimum absent days ({absent_days_range[0]}). Reduce minimum absent days or lower minimum present days.")
@@ -623,6 +626,12 @@ elif st.session_state.page == "📊 Results":
             if max_absent_days <= 0:
                 st.error(f"Error: Minimum present days ({present_days_range[0]}) equals or exceeds total days ({total_days}). Reduce minimum present days.")
                 current_attendance_valid = False
+            elif present_days_range[0] >= present_days_range[1]:
+                st.error(f"Error: Minimum present days ({present_days_range[0]}) must be less than maximum present days ({present_days_range[1]}).")
+                current_attendance_valid = False
+            elif absent_days_range[0] >= absent_days_range[1]:
+                st.error(f"Error: Minimum absent days ({absent_days_range[0]}) must be less than maximum absent days ({absent_days_range[1]}).")
+                current_attendance_valid = False
             elif present_days_range[0] + absent_days_range[1] > total_days:
                 st.error(f"Error: Minimum present days ({present_days_range[0]}) plus maximum absent days ({absent_days_range[1]}) exceeds total days ({total_days}). Reduce absent days range.")
                 current_attendance_valid = False
@@ -640,16 +649,25 @@ elif st.session_state.page == "📊 Results":
             
             if st.button("Generate Current Year Data", disabled=not (gender_dist is not None and current_attendance_valid)):
                 try:
-                    custom_fields = [(f["name"], f["values"]) for f in st.session_state.current_custom_fields if f["name"] and f["values"]]
-                    historical_ids = st.session_state.data["Student_ID"].tolist() if use_historical_ids and st.session_state.data is not None else None
-                    st.session_state.current_data = generate_current_year_data(
-                        num_students, school_prefix, num_schools, grades, gender_dist,
-                        meal_codes, academic_perf, transportation, suspensions_range,
-                        present_days_range, absent_days_range, total_days, custom_fields,
-                        historical_ids=historical_ids
-                    )
-                    st.success("Current year data generated successfully!")
-                    st.dataframe(st.session_state.current_data.head())
+                    with st.spinner("Generating current year data..."):
+                        custom_fields = [(f["name"], f["values"]) for f in st.session_state.current_custom_fields if f["name"] and f["values"]]
+                        historical_ids = st.session_state.data["Student_ID"].tolist() if use_historical_ids and st.session_state.data is not None else None
+                        st.session_state.current_data = generate_current_year_data(
+                            num_students, school_prefix, num_schools, grades, gender_dist,
+                            meal_codes, academic_perf, transportation, suspensions_range,
+                            present_days_range, absent_days_range, total_days, custom_fields,
+                            historical_ids=historical_ids
+                        )
+                        st.success("Current year data generated successfully!")
+                        st.subheader("Data Preview")
+                        st.dataframe(st.session_state.current_data.head(10))
+                        csv = st.session_state.current_data.to_csv(index=False)
+                        st.download_button(
+                            label="Download Current Year Data",
+                            data=csv,
+                            file_name="current_year_data.csv",
+                            mime="text/csv"
+                        )
                 except Exception as e:
                     st.error(f"Error generating data: {str(e)}")
         else:
@@ -658,6 +676,8 @@ elif st.session_state.page == "📊 Results":
                 try:
                     st.session_state.current_data = pd.read_csv(uploaded_file)
                     st.success("Data uploaded successfully!")
+                    st.subheader("Data Preview")
+                    st.dataframe(st.session_state.current_data.head(10))
                 except Exception as e:
                     st.error(f"Error uploading data: {str(e)}")
     
