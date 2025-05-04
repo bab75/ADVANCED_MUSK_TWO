@@ -36,10 +36,10 @@ if 'current_custom_fields' not in st.session_state:
 
 # Sidebar navigation with SVG icons
 st.sidebar.title("Navigation")
-st.sidebar.markdown('<div class="nav-icon"><svg>...</svg>Data Preparation</div>', unsafe_allow_html=True)
-st.sidebar.markdown('<div class="nav-icon"><svg>...</svg>Model Training</div>', unsafe_allow_html=True)
-st.sidebar.markdown('<div class="nav-icon"><svg>...</svg>Predictions</div>', unsafe_allow_html=True)
-st.sidebar.markdown('<div class="nav-icon"><svg>...</svg>Advanced Analysis</div>', unsafe_allow_html=True)
+#st.sidebar.markdown('<div class="nav-icon"><svg>...</svg>Data Preparation</div>', unsafe_allow_html=True)
+#st.sidebar.markdown('<div class="nav-icon"><svg>...</svg>Model Training</div>', unsafe_allow_html=True)
+#st.sidebar.markdown('<div class="nav-icon"><svg>...</svg>Predictions</div>', unsafe_allow_html=True)
+#st.sidebar.markdown('<div class="nav-icon"><svg>...</svg>Advanced Analysis</div>', unsafe_allow_html=True)
 page = st.sidebar.radio("Go to", ["Data Preparation", "Model Training", "Predictions", "Advanced Analysis"], label_visibility="collapsed")
 
 # Page 1: Data Preparation
