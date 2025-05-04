@@ -106,7 +106,8 @@ if st.session_state.page == "📝 Data Configuration":
     st.subheader("Attendance Data")
     total_days = 180
     st.write(f"Total School Days: {total_days}")
-    present_days_range = st.slider("Present Days Range", 0, total_days, (100, 180))
+    # Restrict max present days to total_days - 1 to ensure max_absent_days > 0
+    present_days_range = st.slider("Present Days Range", 0, total_days - 1, (100, 179))
     present_days_valid = present_days_range[0] < present_days_range[1]
     if not present_days_valid:
         st.error("Present Days Range: Minimum must be less than maximum.")
@@ -115,11 +116,13 @@ if st.session_state.page == "📝 Data Configuration":
     if max_absent_days <= 0:
         st.error(f"Minimum present days ({present_days_range[0]}) equals or exceeds total days ({total_days}).")
         max_absent_days = 1
+    
+    # Ensure absent_days_range upper bound is valid
     absent_days_range = st.slider(
         "Absent Days Range",
         0,
         max_absent_days,
-        (0, min(80, max_absent_days)),
+        (0, min(80, max_absent_days - 1)),
         help=f"Maximum absent days cannot exceed {max_absent_days}."
     )
     absent_days_valid = absent_days_range[0] < absent_days_range[1]
@@ -131,10 +134,10 @@ if st.session_state.page == "📝 Data Configuration":
         present_days_valid and
         absent_days_valid and
         present_days_range[0] + absent_days_range[1] <= total_days and
-        present_days_range[1] + absent_days_range[0] >= total_days
+        present_days_range[1] + absent_days_range[0] >= total_days - max_absent_days
     )
     if not attendance_valid:
-        st.error("Invalid attendance configuration. Check ranges and totals.")
+        st.error("Invalid attendance configuration. Ensure present and absent days are consistent with total days.")
     
     st.subheader("Custom Fields")
     if st.button("Add Custom Field"):
@@ -403,7 +406,8 @@ elif st.session_state.page == "📊 Results":
         st.subheader("Attendance Data")
         total_days = 180
         st.write(f"Total School Days: {total_days}")
-        present_days_range = st.slider("Present Days Range", 0, total_days, (100, 180), key="current_present")
+        # Restrict max present days to total_days - 1
+        present_days_range = st.slider("Present Days Range", 0, total_days - 1, (100, 179), key="current_present")
         present_days_valid = present_days_range[0] < present_days_range[1]
         if not present_days_valid:
             st.error("Present Days Range: Minimum must be less than maximum.")
@@ -412,11 +416,12 @@ elif st.session_state.page == "📊 Results":
         if max_absent_days <= 0:
             st.error(f"Minimum present days ({present_days_range[0]}) equals or exceeds total days ({total_days}).")
             max_absent_days = 1
+        
         absent_days_range = st.slider(
             "Absent Days Range",
             0,
             max_absent_days,
-            (0, min(80, max_absent_days)),
+            (0, min(80, max_absent_days - 1)),
             key="current_absent",
             help=f"Maximum absent days cannot exceed {max_absent_days}."
         )
@@ -429,7 +434,7 @@ elif st.session_state.page == "📊 Results":
             present_days_valid and
             absent_days_valid and
             present_days_range[0] + absent_days_range[1] <= total_days and
-            present_days_range[1] + absent_days_range[0] >= total_days
+            present_days_range[1] + absent_days_range[0] >= total_days - max_absent_days
         )
         if not attendance_valid:
             st.error("Invalid attendance configuration.")
