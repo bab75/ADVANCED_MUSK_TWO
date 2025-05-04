@@ -258,16 +258,27 @@ elif st.session_state.page == "🤖 Model Training":
             
             st.subheader("Feature Selection")
             combined_data = combine_datasets([st.session_state.datasets[ds] for ds in selected_datasets])
-            excluded_features = ["Student_ID", "CA_Prediction", "CA_Probability", "Drop_Off", "Prediction_Causes"]
+            excluded_features = ["Student_ID", "School", "CA_Prediction", "CA_Probability", "Drop_Off", "Prediction_Causes"]
             available_features = [col for col in combined_data.columns if col not in excluded_features]
-            feature_toggles = {f: st.checkbox(f, value=True, key=f"feature_{f}") for f in available_features}
+            # Default to numerical and categorical features that are not identifiers
+            default_features = [col for col in available_features if col in ["Grade", "Gender", "Meal_Code", "Academic_Performance", "Transportation", "Suspensions", "Present_Days", "Absent_Days", "Attendance_Percentage"] or col in [f["name"] for f in st.session_state.custom_fields if f["name"]]]
+            feature_toggles = {f: st.checkbox(f, value=f in default_features, key=f"feature_{f}") for f in available_features}
             features = [f for f, enabled in feature_toggles.items() if enabled]
+            
+            # Warn if School is selected
+            if "School" in features:
+                st.warning("The 'School' column is included as a feature. It will be encoded as a categorical variable. Ensure this is intentional, as it may increase model complexity.")
+            
+            # Warn if non-numeric features are selected
+            non_numeric_features = [f for f in features if combined_data[f].dtype == "object" or combined_data[f].dtype.name == "category"]
+            if non_numeric_features:
+                st.info(f"Non-numeric features selected: {', '.join(non_numeric_features)}. These will be encoded automatically.")
             
             st.subheader("Target Selection")
             # Identify potential target columns (categorical or binary with valid values)
             potential_targets = []
             for col in combined_data.columns:
-                if col in ["Student_ID", "Attendance_Percentage", "Academic_Performance", "Present_Days", "Absent_Days", "Suspensions"]:
+                if col in ["Student_ID", "School", "Attendance_Percentage", "Academic_Performance", "Present_Days", "Absent_Days", "Suspensions"]:
                     continue
                 if combined_data[col].dtype in ["object", "category"] or len(combined_data[col].unique()) <= 2:
                     # Ensure column has no missing values and at least two non-null values
@@ -572,16 +583,27 @@ elif st.session_state.page == "📊 Results":
     if st.session_state.current_data is not None and st.session_state.models:
         st.subheader("Run Predictions")
         selected_model = st.selectbox("Select Model", list(st.session_state.models.keys()))
-        excluded_columns = ["Student_ID", "CA_Prediction", "CA_Probability", "Drop_Off", "Prediction_Causes"]
+        excluded_columns = ["Student_ID", "School", "CA_Prediction", "CA_Probability", "Drop_Off", "Prediction_Causes"]
         available_features = [col for col in st.session_state.current_data.columns if col not in excluded_columns]
-        feature_toggles = {f: st.checkbox(f, value=True, key=f"predict_feature_{f}") for f in available_features}
+        # Default to features used in training, if available
+        default_features = st.session_state.training_features if st.session_state.training_features else [col for col in available_features if col in ["Grade", "Gender", "Meal_Code", "Academic_Performance", "Transportation", "Suspensions", "Present_Days", "Absent_Days", "Attendance_Percentage"] or col in [f["name"] for f in st.session_state.current_custom_fields if f["name"]]]
+        feature_toggles = {f: st.checkbox(f, value=f in default_features, key=f"predict_feature_{f}") for f in available_features}
         features = [f for f, enabled in feature_toggles.items() if enabled]
+        
+        # Warn if School is selected
+        if "School" in features:
+            st.warning("The 'School' column is included as a feature. It will be encoded as a categorical variable. Ensure this is intentional, as it may increase model complexity.")
         
         # Warn if prediction features differ from training features
         if st.session_state.training_features and set(features) != set(st.session_state.training_features):
             st.warning("Prediction features differ from training features. This may cause errors. Ensure the same features are selected as during training.")
         
-        group_by_options = [col for col in available_features if st.session_state.current_data[col].dtype == "object" or col == "Grade"]
+        # Warn if non-numeric features are selected
+        non_numeric_features = [f for f in features if st.session_state.current_data[f].dtype == "object" or st.session_state.current_data[f].dtype.name == "category"]
+        if non_numeric_features:
+            st.info(f"Non-numeric features selected: {', '.join(non_numeric_features)}. These will be encoded automatically.")
+        
+        group_by_options = [col for col in available_features if st.session_state.current_data[col].dtype == "object" or st.session_state.current_data[col].dtype.name == "category" or col == "Grade"]
         group_by_options += [f["name"] for f in st.session_state.current_custom_fields if f["name"] in st.session_state.current_data.columns]
         group_by_feature = st.selectbox(
             "Group Drop Off % By",
