@@ -106,7 +106,6 @@ if st.session_state.page == "📝 Data Configuration":
     st.subheader("Attendance Data")
     total_days = 180
     st.write(f"Total School Days: {total_days}")
-    # Restrict max present days to total_days - 1 to ensure max_absent_days > 0
     present_days_range = st.slider("Present Days Range", 0, total_days - 1, (100, 179))
     present_days_valid = present_days_range[0] < present_days_range[1]
     if not present_days_valid:
@@ -117,7 +116,6 @@ if st.session_state.page == "📝 Data Configuration":
         st.error(f"Minimum present days ({present_days_range[0]}) equals or exceeds total days ({total_days}).")
         max_absent_days = 1
     
-    # Ensure absent_days_range upper bound is valid
     absent_days_range = st.slider(
         "Absent Days Range",
         0,
@@ -243,15 +241,12 @@ elif st.session_state.page == "🤖 Model Training":
         st.subheader("Select Datasets")
         selected_datasets = []
         for dataset_id, data in st.session_state.datasets.items():
-            targets_present = all(col in data.columns for col in ["CA_Status", "Drop_Off"])
-            label = f"Dataset {dataset_id[:8]} (Rows: {len(data)}, Targets: {'CA_Status, Drop_Off' if targets_present else 'Missing'})"
-            if st.checkbox(label, key=f"dataset_{dataset_id}", disabled=not targets_present):
+            label = f"Dataset {dataset_id[:8]} (Rows: {len(data)}, Columns: {len(data.columns)})"
+            if st.checkbox(label, key=f"dataset_{dataset_id}"):
                 selected_datasets.append(dataset_id)
-            if not targets_present:
-                st.warning(f"Dataset {dataset_id[:8]} is missing required target columns (CA_Status, Drop_Off).")
         
         if not selected_datasets:
-            st.warning("Please select at least one dataset with required target columns to proceed.")
+            st.warning("Please select at least one dataset to proceed.")
         else:
             st.subheader("Dataset Summary")
             for ds_id in selected_datasets:
@@ -260,15 +255,25 @@ elif st.session_state.page == "🤖 Model Training":
             
             st.subheader("Feature Selection")
             combined_data = combine_datasets([st.session_state.datasets[ds] for ds in selected_datasets])
-            excluded_features = ["Student_ID", "CA_Status", "Drop_Off"]
+            excluded_features = ["Student_ID"]
             available_features = [col for col in combined_data.columns if col not in excluded_features]
             feature_toggles = {f: st.checkbox(f, value=True, key=f"feature_{f}") for f in available_features}
             features = [f for f, enabled in feature_toggles.items() if enabled]
             
             st.subheader("Target Selection")
-            targets = st.multiselect("Select Targets", ["CA_Status", "Drop_Off"], default=["CA_Status"])
-            if not targets:
-                st.error("Please select at least one target.")
+            # Identify potential target columns (categorical or binary)
+            potential_targets = []
+            for col in combined_data.columns:
+                if col in ["Student_ID", "Attendance_Percentage", "Academic_Performance", "Present_Days", "Absent_Days", "Suspensions"]:
+                    continue
+                if combined_data[col].dtype in ["object", "category"] or len(combined_data[col].unique()) <= 2:
+                    potential_targets.append(col)
+            if not potential_targets:
+                st.error("No suitable target columns found in the selected datasets.")
+            else:
+                targets = st.multiselect("Select Targets", potential_targets, default=["CA_Status"] if "CA_Status" in potential_targets else potential_targets[:1])
+                if not targets:
+                    st.error("Please select at least one target.")
             
             st.subheader("Model Selection")
             models_to_train = st.multiselect(
@@ -406,7 +411,6 @@ elif st.session_state.page == "📊 Results":
         st.subheader("Attendance Data")
         total_days = 180
         st.write(f"Total School Days: {total_days}")
-        # Restrict max present days to total_days - 1
         present_days_range = st.slider("Present Days Range", 0, total_days - 1, (100, 179), key="current_present")
         present_days_valid = present_days_range[0] < present_days_range[1]
         if not present_days_valid:
@@ -660,5 +664,5 @@ elif st.session_state.page == "📚 Documentation":
             if model_name in st.session_state.models:
                 fig = plot_feature_importance(st.session_state.models[model_name]["model"], st.session_state.models[model_name]["feature_names"])
                 if fig:
-                    st.plotly_chart(fig)
+                    st.plotly_chart.fig)
                     break
