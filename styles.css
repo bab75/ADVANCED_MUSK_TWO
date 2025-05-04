@@ -70,3 +70,11 @@ h1, h2, h3 {
 .stExpander > div > summary:hover {
     background-color: #ecf0f1;
 }
+
+.plot-container {
+    border: 1px solid #3498db;
+    border-radius: 5px;
+    padding: 10px;
+    background-color: #ffffff;
+    margin-top: 10px;
+}
