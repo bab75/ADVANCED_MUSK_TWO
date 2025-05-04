@@ -1,6 +1,17 @@
 import pandas as pd
 import numpy as np
 import random
+import warnings
+
+def safe_randrange(start, stop):
+    """
+    Safely generate a random integer in [start, stop).
+    If start == stop, return start to avoid empty range error.
+    """
+    if start == stop:
+        warnings.warn(f"Empty range detected in randrange({start}, {stop}). Returning {start}.")
+        return start
+    return random.randrange(start, stop)
 
 def generate_historical_data(
     num_students, year_start, year_end, school_prefix, num_schools,
@@ -8,62 +19,47 @@ def generate_historical_data(
     suspensions_range, present_days_range, absent_days_range, total_days,
     custom_fields, id_length, dropoff_percent
 ):
-    data = []
     years = list(range(year_start, year_end + 1))
-    used_ids = set()
+    schools = [f"{school_prefix}{i:03d}" for i in range(1, num_schools + 1)]
+    genders = ["Male", "Female", "Other"]
+    gender_probs = [p / 100 for p in gender_dist]
     
-    def generate_student_id():
-        min_id = 10 ** (id_length - 1)
-        max_id = (10 ** id_length) - 1
-        while True:
-            student_id = random.randint(min_id, max_id)
-            if student_id not in used_ids:
-                used_ids.add(student_id)
-                return str(student_id)
+    data = []
+    student_ids = [f"{'S' + str(i).zfill(id_length - 1)}" for i in range(1, num_students + 1)]
     
-    target_ca_count = int(num_students * len(years) * (dropoff_percent / 100))
-    ca_indices = random.sample(range(num_students * len(years)), target_ca_count)
-    
-    record_index = 0
-    for student_idx in range(num_students):
-        student_id = generate_student_id()
+    for student_id in student_ids:
         for year in years:
-            school_id = f"{school_prefix}{random.randint(1, num_schools)}"
             grade = random.choice(grades)
-            
-            gender_probs = [p / 100 for p in gender_dist]
-            gender = np.random.choice(["Male", "Female", "Other"], p=gender_probs)
-            
+            school = random.choice(schools)
+            gender = np.random.choice(genders, p=gender_probs)
             meal_code = random.choice(meal_codes)
-            academic_performance = random.uniform(academic_perf[0], academic_perf[1])
             transport = random.choice(transportation)
-            suspensions = random.randint(suspensions_range[0], suspensions_range[1])
+            academic_performance = safe_randrange(academic_perf[0], academic_perf[1] + 1)
+            suspensions = safe_randrange(suspensions_range[0], suspensions_range[1] + 1)
             
-            present_days = random.randint(present_days_range[0], present_days_range[1])
+            present_days = safe_randrange(present_days_range[0], present_days_range[1] + 1)
             max_absent_days = total_days - present_days
-            absent_days = random.randint(
-                max(0, absent_days_range[0]),
-                min(absent_days_range[1], max_absent_days)
-            )
+            if max_absent_days < absent_days_range[0]:
+                absent_days = absent_days_range[0]
+            elif max_absent_days > absent_days_range[1]:
+                absent_days = safe_randrange(absent_days_range[0], absent_days_range[1] + 1)
+            else:
+                absent_days = safe_randrange(absent_days_range[0], max_absent_days + 1)
             
             attendance_percentage = (present_days / total_days) * 100
             
-            is_ca = record_index in ca_indices
-            if is_ca:
-                absent_days = max(absent_days, int(total_days * 0.1))
-                present_days = total_days - absent_days
-                attendance_percentage = (present_days / total_days) * 100
-            ca_status = "CA" if is_ca else "Non-CA"
+            ca_threshold = (total_days * (100 - dropoff_percent)) / 100
+            ca_status = "CA" if present_days < ca_threshold else "Non-CA"
             
-            record = {
+            student_data = {
                 "Student_ID": student_id,
                 "Year": year,
-                "School": school_id,
                 "Grade": grade,
+                "School": school,
                 "Gender": gender,
                 "Meal_Code": meal_code,
-                "Academic_Performance": academic_performance,
                 "Transportation": transport,
+                "Academic_Performance": academic_performance,
                 "Suspensions": suspensions,
                 "Present_Days": present_days,
                 "Absent_Days": absent_days,
@@ -72,13 +68,14 @@ def generate_historical_data(
             }
             
             for field_name, field_values in custom_fields:
-                values = field_values.split(",")
-                record[field_name] = random.choice([v.strip() for v in values])
+                values = [v.strip() for v in field_values.split(",")]
+                student_data[field_name] = random.choice(values)
             
-            data.append(record)
-            record_index += 1
+            data.append(student_data)
     
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    df = df.sort_values(["Student_ID", "Year"]).reset_index(drop=True)
+    return df
 
 def generate_current_year_data(
     num_students, school_prefix, num_schools, grades, gender_dist,
@@ -86,165 +83,78 @@ def generate_current_year_data(
     present_days_range, absent_days_range, total_days, custom_fields,
     historical_ids=None, id_length=5, dropoff_percent=20, include_graduates=False
 ):
+    schools = [f"{school_prefix}{i:03d}" for i in range(1, num_schools + 1)]
+    genders = ["Male", "Female", "Other"]
+    gender_probs = [p / 100 for p in gender_dist]
+    current_year = max(historical_ids["Year"].max() + 1, 2025) if historical_ids is not None else 2025
+    
     data = []
-    year = 2025
-    used_ids = set()
     
-    def generate_student_id():
-        min_id = 10 ** (id_length - 1)
-        max_id = (10 ** id_length) - 1
-        while True:
-            student_id = random.randint(min_id, max_id)
-            if student_id not in used_ids:
-                used_ids.add(student_id)
-                return str(student_id)
+    if historical_ids is not None and not historical_ids.empty:
+        historical_students = historical_ids[["Student_ID", "Grade", "Year"]].drop_duplicates()
+        historical_students = historical_students.sort_values("Year").groupby("Student_ID").last().reset_index()
+        
+        if not include_graduates:
+            historical_students = historical_students[historical_students["Grade"] < 12]
+        
+        student_ids = historical_students["Student_ID"].tolist()
+        if len(student_ids) > num_students:
+            student_ids = random.sample(student_ids, num_students)
+        elif len(student_ids) < num_students:
+            additional_ids = [f"{'S' + str(i).zfill(id_length - 1)}" for i in range(len(student_ids) + 1, num_students + 1)]
+            student_ids.extend(additional_ids)
+    else:
+        student_ids = [f"{'S' + str(i).zfill(id_length - 1)}" for i in range(1, num_students + 1)]
     
-    # Process historical IDs for grade progression
-    historical_students = []
-    if historical_ids and isinstance(historical_ids, pd.DataFrame):
-        # Deduplicate historical data by selecting the most recent record per student
-        historical_data = historical_ids.sort_values(by=["Student_ID", "Year", "Grade"], ascending=[True, False, False])
-        historical_data = historical_data.drop_duplicates(subset=["Student_ID"], keep="first")
-        
-        for _, row in historical_data.iterrows():
-            student_id = row["Student_ID"]
-            last_grade = row["Grade"]
-            last_year = row["Year"]
-            
-            # Calculate expected grade for 2025
-            years_diff = year - last_year
-            expected_grade = last_grade + years_diff
-            
-            # Handle grade progression
-            if expected_grade <= max(grades):
-                if include_graduates or expected_grade in grades:
-                    historical_students.append({
-                        "Student_ID": student_id,
-                        "Grade": expected_grade if expected_grade in grades else random.choice(grades),
-                        # Preserve custom fields from historical data if available
-                        **{field: row[field] for field, _ in custom_fields if field in historical_data.columns}
-                    })
-            elif include_graduates and max(grades) in grades:
-                historical_students.append({
-                    "Student_ID": student_id,
-                    "Grade": max(grades),  # Cap at maximum grade
-                    **{field: row[field] for field, _ in custom_fields if field in historical_data.columns}
-                })
-    
-    # Shuffle historical students to randomize selection
-    random.shuffle(historical_students)
-    num_historical = min(len(historical_students), num_students)
-    remaining_students = num_students - num_historical
-    
-    target_ca_count = int(num_students * (dropoff_percent / 100))
-    ca_indices = random.sample(range(num_students), target_ca_count)
-    
-    # Generate records for historical students
-    for i in range(num_historical):
-        student = historical_students[i]
-        student_id = student["Student_ID"]
-        grade = student["Grade"]
-        
-        school_id = f"{school_prefix}{random.randint(1, num_schools)}"
-        
-        gender_probs = [p / 100 for p in gender_dist]
-        gender = np.random.choice(["Male", "Female", "Other"], p=gender_probs)
-        
-        meal_code = random.choice(meal_codes)
-        academic_performance = random.uniform(academic_perf[0], academic_perf[1])
-        transport = random.choice(transportation)
-        suspensions = random.randint(suspensions_range[0], suspensions_range[1])
-        
-        present_days = random.randint(present_days_range[0], present_days_range[1])
-        max_absent_days = total_days - present_days
-        absent_days = random.randint(
-            max(0, absent_days_range[0]),
-            min(absent_days_range[1], max_absent_days)
-        )
-        
-        attendance_percentage = (present_days / total_days) * 100
-        
-        is_ca = i in ca_indices
-        if is_ca:
-            absent_days = max(absent_days, int(total_days * 0.1))
-            present_days = total_days - absent_days
-            attendance_percentage = (present_days / total_days) * 100
-        
-        used_ids.add(student_id)
-        
-        record = {
-            "Student_ID": student_id,
-            "Year": year,
-            "School": school_id,
-            "Grade": grade,
-            "Gender": gender,
-            "Meal_Code": meal_code,
-            "Academic_Performance": academic_performance,
-            "Transportation": transport,
-            "Suspensions": suspensions,
-            "Present_Days": present_days,
-            "Absent_Days": absent_days,
-            "Attendance_Percentage": attendance_percentage
-        }
-        
-        # Use historical custom field values if available, else generate new
-        for field_name, field_values in custom_fields:
-            if field_name in student:
-                record[field_name] = student[field_name]
-            else:
-                values = field_values.split(",")
-                record[field_name] = random.choice([v.strip() for v in values])
-        
-        data.append(record)
-    
-    # Generate records for new students
-    for i in range(num_historical, num_students):
-        student_id = generate_student_id()
-        school_id = f"{school_prefix}{random.randint(1, num_schools)}"
+    for student_id in student_ids:
         grade = random.choice(grades)
+        if historical_ids is not None and student_id in historical_students["Student_ID"].values:
+            last_grade = historical_students.loc[historical_students["Student_ID"] == student_id, "Grade"].iloc[0]
+            grade = min(last_grade + 1, 12) if last_grade < 12 else 12
         
-        gender_probs = [p / 100 for p in gender_dist]
-        gender = np.random.choice(["Male", "Female", "Other"], p=gender_probs)
-        
+        school = random.choice(schools)
+        gender = np.random.choice(genders, p=gender_probs)
         meal_code = random.choice(meal_codes)
-        academic_performance = random.uniform(academic_perf[0], academic_perf[1])
         transport = random.choice(transportation)
-        suspensions = random.randint(suspensions_range[0], suspensions_range[1])
+        academic_performance = safe_randrange(academic_perf[0], academic_perf[1] + 1)
+        suspensions = safe_randrange(suspensions_range[0], suspensions_range[1] + 1)
         
-        present_days = random.randint(present_days_range[0], present_days_range[1])
+        present_days = safe_randrange(present_days_range[0], present_days_range[1] + 1)
         max_absent_days = total_days - present_days
-        absent_days = random.randint(
-            max(0, absent_days_range[0]),
-            min(absent_days_range[1], max_absent_days)
-        )
+        if max_absent_days < absent_days_range[0]:
+            absent_days = absent_days_range[0]
+        elif max_absent_days > absent_days_range[1]:
+            absent_days = safe_randrange(absent_days_range[0], absent_days_range[1] + 1)
+        else:
+            absent_days = safe_randrange(absent_days_range[0], max_absent_days + 1)
         
         attendance_percentage = (present_days / total_days) * 100
         
-        is_ca = i in ca_indices
-        if is_ca:
-            absent_days = max(absent_days, int(total_days * 0.1))
-            present_days = total_days - absent_days
-            attendance_percentage = (present_days / total_days) * 100
+        ca_threshold = (total_days * (100 - dropoff_percent)) / 100
+        ca_status = "CA" if present_days < ca_threshold else "Non-CA"
         
-        record = {
+        student_data = {
             "Student_ID": student_id,
-            "Year": year,
-            "School": school_id,
+            "Year": current_year,
             "Grade": grade,
+            "School": school,
             "Gender": gender,
             "Meal_Code": meal_code,
-            "Academic_Performance": academic_performance,
             "Transportation": transport,
+            "Academic_Performance": academic_performance,
             "Suspensions": suspensions,
             "Present_Days": present_days,
             "Absent_Days": absent_days,
-            "Attendance_Percentage": attendance_percentage
+            "Attendance_Percentage": attendance_percentage,
+            "CA_Status": ca_status
         }
         
         for field_name, field_values in custom_fields:
-            values = field_values.split(",")
-            record[field_name] = random.choice([v.strip() for v in values])
+            values = [v.strip() for v in field_values.split(",")]
+            student_data[field_name] = random.choice(values)
         
-        data.append(record)
+        data.append(student_data)
     
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    df = df.sort_values("Student_ID").reset_index(drop=True)
+    return df
