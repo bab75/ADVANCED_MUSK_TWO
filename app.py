@@ -22,6 +22,20 @@ st.set_page_config(page_title="Chronic Absenteeism Prediction", layout="wide")
 # Load CSS for styling
 st.markdown('<style>' + open('styles.css').read() + '</style>', unsafe_allow_html=True)
 
+# Function to clear session state
+def clear_session_state():
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.session_state.data = None
+    st.session_state.models = {}
+    st.session_state.current_data = None
+    st.session_state.custom_fields = []
+    st.session_state.current_custom_fields = []
+    st.session_state.selected_student_id = None
+    st.session_state.model_versions = {}
+    st.session_state.patterns = []
+    st.session_state.page = "Data Configuration"
+
 # Initialize session state
 if 'data' not in st.session_state:
     st.session_state.data = None
@@ -42,47 +56,49 @@ if 'patterns' not in st.session_state:
 if 'page' not in st.session_state:
     st.session_state.page = "Data Configuration"
 
-# Sidebar navigation with action buttons
+# Sidebar navigation with radio buttons
 st.sidebar.title("Navigation")
-if st.sidebar.button("""
+st.sidebar.markdown("""
 <div class="nav-icon">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 24px; height: 24px; margin-right: 10px;">
         <path d="M3 3h18v18H3V3zm2 2v14h14V5H5zm2 2h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/>
     </svg>
     📝 Data Configuration
 </div>
-""", key="nav_data"):
-    st.session_state.page = "Data Configuration"
-if st.sidebar.button("""
 <div class="nav-icon">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 24px; height: 24px; margin-right: 10px;">
         <path d="M12 2a10 10 0 00-8 4v2h2v2H4v2h2v2H4v2h2v2h2a10 10 0 008-4 10 10 0 008 4h2v-2h-2v-2h2v-2h-2v-2h2V8h-2V6a10 10 0 00-8-4zm0 2a8 8 0 016.32 3H17v2h-2v2h2v2h-2v2h2v2h-1.32A8 8 0 0112 20a8 8 0 01-6.32-3H7v-2H5v-2h2v-2H5V9h2V7h1.32A8 8 0 0112 4z"/>
     </svg>
     🤖 Model Training
 </div>
-""", key="nav_model"):
-    st.session_state.page = "Model Training"
-if st.sidebar.button("""
 <div class="nav-icon">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 24px; height: 24px; margin-right: 10px;">
         <path d="M3 3h18v18H3V3zm2 2v14h14V5H5zm2 2h2v6H7V7zm4 0h2v10h-2V7zm4 0h2v4h-2V7z"/>
     </svg>
     📊 Results
 </div>
-""", key="nav_results"):
-    st.session_state.page = "Results"
-if st.sidebar.button("""
 <div class="nav-icon">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 24px; height: 24px; margin-right: 10px;">
         <path d="M4 3h16a2 2 0 012 2v14a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2zm1 2v14h14V5H5zm2 2h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/>
     </svg>
     📚 Documentation
 </div>
-""", key="nav_docs"):
-    st.session_state.page = "Documentation"
+""", unsafe_allow_html=True)
+page = st.sidebar.radio("Go to", [
+    "📝 Data Configuration",
+    "🤖 Model Training",
+    "📊 Results",
+    "📚 Documentation"
+], index=["📝 Data Configuration", "🤖 Model Training", "📊 Results", "📚 Documentation"].index(st.session_state.page), label_visibility="collapsed")
+st.session_state.page = page
+
+# Clear All Data Button
+if st.sidebar.button("Clear All Data"):
+    clear_session_state()
+    st.experimental_rerun()
 
 # Page 1: Data Configuration
-if st.session_state.page == "Data Configuration":
+if st.session_state.page == "📝 Data Configuration":
     st.markdown("""
     <h1>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 30px; height: 30px; vertical-align: middle; margin-right: 10px;">
@@ -176,7 +192,7 @@ if st.session_state.page == "Data Configuration":
             st.error(f"Error generating data: {str(e)}")
 
 # Page 2: Model Training
-elif st.session_state.page == "Model Training":
+elif st.session_state.page == "🤖 Model Training":
     st.markdown("""
     <h1>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 30px; height: 30px; vertical-align: middle; margin-right: 10px;">
@@ -446,7 +462,7 @@ elif st.session_state.page == "Model Training":
                     st.write(f"- {pattern['pattern']}: {pattern['explanation']}")
 
 # Page 3: Results
-elif st.session_state.page == "Results":
+elif st.session_state.page == "📊 Results":
     st.markdown("""
     <h1>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 30px; height: 30px; vertical-align: middle; margin-right: 10px;">
@@ -561,7 +577,7 @@ elif st.session_state.page == "Results":
                 
                 # Results
                 st.session_state.current_data["CA_Prediction"] = predictions
-                st.session_state.current_data["/error training Random Forest: cannot access local variable 'model' where it is not associated with a valueCA_Probability"] = probabilities
+                st.session_state.current_data["CA_Probability"] = probabilities
                 
                 st.subheader("Prediction Results")
                 st.dataframe(st.session_state.current_data)
@@ -571,63 +587,6 @@ elif st.session_state.page == "Results":
                 fig = px.imshow(heatmap_data, title="CA Probability Heatmap by Grade and School (High Risk in Red)", 
                                labels={"color": "CA Probability"}, color_continuous_scale="Reds")
                 st.plotly_chart(fig)
-                
-                # Student-Level Insights Panel
-                st.subheader("Student-Level Insights")
-                student_ids = st.session_state.current_data["Student_ID"].tolist()
-                search_query = st.text_input("Search Student ID", value=st.session_state.selected_student_id or "")
-                
-                # Autocomplete suggestions
-                if search_query:
-                    suggestions = [sid for sid in student_ids if search_query.lower() in sid.lower()][:10]
-                    if suggestions:
-                        selected_suggestion = st.selectbox("Suggestions", suggestions, key="student_suggestion")
-                        if selected_suggestion:
-                            st.session_state.selected_student_id = selected_suggestion
-                
-                if st.session_state.selected_student_id in student_ids:
-                    student_data = st.session_state.current_data[st.session_state.current_data["Student_ID"] == st.session_state.selected_student_id]
-                    if not student_data.empty:
-                        st.write("**Student Profile**")
-                        st.dataframe(student_data)
-                        
-                        # Trends Visualization
-                        st.write("**Attendance Trends**")
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(
-                            x=[student_data["Year"].iloc[0]],
-                            y=[student_data["Attendance_Percentage"].iloc[0]],
-                            mode="lines+markers",
-                            name="Attendance (%)"
-                        ))
-                        fig.update_layout(
-                            title="Attendance Trend",
-                            xaxis_title="Year",
-                            yaxis_title="Attendance Percentage"
-                        )
-                        st.plotly_chart(fig)
-                        
-                        # Risk Assessment Score
-                        attendance = student_data["Attendance_Percentage"].iloc[0]
-                        academic = student_data["Academic_Performance"].iloc[0]
-                        suspensions = student_data["Suspensions"].iloc[0]
-                        risk_score = (100 - attendance) * 0.4 + (100 - academic) * 0.3 + suspensions * 10
-                        st.write(f"**Risk Assessment Score**: {risk_score:.2f}/100")
-                        if risk_score > 50:
-                            st.warning("High risk of chronic absenteeism!")
-                        
-                        # Preventive Actions
-                        ca_prob = student_data["CA_Probability"].iloc[0]
-                        ca_pred = student_data["CA_Prediction"].iloc[0]
-                        st.write(f"**CA Prediction**: {ca_pred}")
-                        st.write(f"**CA Probability**: {ca_prob:.2f}")
-                        st.write("**Preventive Actions**:")
-                        if ca_pred == "CA" or risk_score > 50:
-                            st.write("- Increase attendance monitoring.")
-                            st.write("- Provide academic support or tutoring.")
-                            st.write("- Engage with parents to address absence causes.")
-                            if suspensions > 0:
-                                st.write("- Address behavioral issues through counseling.")
                 
                 # Visualizations
                 fig = px.histogram(st.session_state.current_data, x="CA_Probability", 
@@ -644,9 +603,92 @@ elif st.session_state.page == "Results":
                 st.download_button("Download Predictions", csv, "predictions.csv", "text/csv")
             except Exception as e:
                 st.error(f"Error running predictions: {str(e)}")
+        
+        # Single Student Analysis
+        st.subheader("Single Student Analysis")
+        if "CA_Prediction" in st.session_state.current_data.columns:
+            student_ids = st.session_state.current_data["Student_ID"].tolist()
+            search_query = st.text_input("Search Student ID", value=st.session_state.selected_student_id or "", key="student_search")
+            
+            # Autocomplete suggestions
+            if search_query:
+                suggestions = [sid for sid in student_ids if search_query.lower() in sid.lower()][:10]
+                if suggestions:
+                    selected_suggestion = st.selectbox("Suggestions", suggestions, key="student_suggestion")
+                    if selected_suggestion:
+                        st.session_state.selected_student_id = selected_suggestion
+            
+            if st.session_state.selected_student_id in student_ids:
+                student_data = st.session_state.current_data[st.session_state.current_data["Student_ID"] == st.session_state.selected_student_id]
+                if not student_data.empty:
+                    st.write("**Student Profile**")
+                    st.dataframe(student_data)
+                    
+                    # Risk Assessment Score
+                    attendance = student_data["Attendance_Percentage"].iloc[0]
+                    academic = student_data["Academic_Performance"].iloc[0]
+                    suspensions = student_data["Suspensions"].iloc[0]
+                    risk_score = (100 - attendance) * 0.4 + (100 - academic) * 0.3 + suspensions * 10
+                    
+                    # Gauge Plot for Risk Score
+                    fig = go.Figure(go.Indicator(
+                        mode="gauge+number",
+                        value=risk_score,
+                        title={"text": "Risk Assessment Score"},
+                        gauge={
+                            "axis": {"range": [0, 100]},
+                            "bar": {"color": "#3498db"},
+                            "steps": [
+                                {"range": [0, 50], "color": "green"},
+                                {"range": [50, 75], "color": "yellow"},
+                                {"range": [75, 100], "color": "red"}
+                            ],
+                            "threshold": {
+                                "line": {"color": "black", "width": 4},
+                                "thickness": 0.75,
+                                "value": 50
+                            }
+                        }
+                    ))
+                    fig.update_layout(height=300)
+                    st.plotly_chart(fig)
+                    
+                    if risk_score > 50:
+                        st.warning("High risk of chronic absenteeism!")
+                    
+                    # Trends Visualization
+                    st.write("**Attendance Trends**")
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=[student_data["Year"].iloc[0]],
+                        y=[student_data["Attendance_Percentage"].iloc[0]],
+                        mode="lines+markers",
+                        name="Attendance (%)"
+                    ))
+                    fig.update_layout(
+                        title="Attendance Trend",
+                        xaxis_title="Year",
+                        yaxis_title="Attendance Percentage"
+                    )
+                    st.plotly_chart(fig)
+                    
+                    # CA Prediction and Preventive Actions
+                    ca_prob = student_data["CA_Probability"].iloc[0]
+                    ca_pred = student_data["CA_Prediction"].iloc[0]
+                    st.write(f"**CA Prediction**: {ca_pred}")
+                    st.write(f"**CA Probability**: {ca_prob:.2f}")
+                    st.write("**Preventive Actions**:")
+                    if ca_pred == "CA" or risk_score > 50:
+                        st.write("- Increase attendance monitoring.")
+                        st.write("- Provide academic support or tutoring.")
+                        st.write("- Engage with parents to address absence causes.")
+                        if suspensions > 0:
+                            st.write("- Address behavioral issues through counseling.")
+        else:
+            st.info("Run predictions to enable single student analysis.")
 
 # Page 4: Documentation
-elif st.session_state.page == "Documentation":
+elif st.session_state.page == "📚 Documentation":
     st.markdown("""
     <h1>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 30px; height: 30px; vertical-align: middle; margin-right: 10px;">
@@ -734,11 +776,15 @@ elif st.session_state.page == "Documentation":
         
         st.header("Group Analysis & Comparisons")
         st.write("**Filter Students**")
-        filter_grade = st.multiselect("Filter by Grade", sorted(st.session_state.data["Grade"].unique()))
-        filter_gender = st.multiselect("Filter by Gender", st.session_state.data["Gender"].unique())
-        filter_school = st.multiselect("Filter by School", st.session_state.data["School"].unique())
-        filter_meal = st.multiselect("Filter by Meal Code", st.session_state.data["Meal_Code"].unique())
-        filter_transport = st.multiselect("Filter by Transportation", st.session_state.data["Transportation"].unique())
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            filter_grade = st.multiselect("Filter by Grade", sorted(st.session_state.data["Grade"].unique()), key="filter_grade")
+            filter_gender = st.multiselect("Filter by Gender", st.session_state.data["Gender"].unique(), key="filter_gender")
+        with col2:
+            filter_school = st.multiselect("Filter by School", st.session_state.data["School"].unique(), key="filter_school")
+            filter_meal = st.multiselect("Filter by Meal Code", st.session_state.data["Meal_Code"].unique(), key="filter_meal")
+        with col3:
+            filter_transport = st.multiselect("Filter by Transportation", st.session_state.data["Transportation"].unique(), key="filter_transport")
         
         filtered_data = st.session_state.data
         if filter_grade:
