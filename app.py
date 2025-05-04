@@ -328,10 +328,14 @@ elif st.session_state.page == "🤖 Model Training":
                         try:
                             status_container.write(f"Training {model_name}...")
                             if enable_tuning and model_name in tuning_params:
-                                model, metrics, best_params = tune_model(model_name, X_train_processed, y_train, X_test_processed, y_test, tuning_params[model_name])
+                                model, metrics, best_params = tune_model(model_name, X_train_processed, y_train, X_test_processed, y_test)
                             else:
                                 model, metrics = train_model(model_name, X_train_processed, y_train, X_test_processed, y_test)
                                 best_params = None
+                            
+                            # Store y_test and y_pred for confusion matrix
+                            y_pred = model.predict(X_test_processed)
+                            metrics['y_pred'] = y_pred
                             
                             version_id = str(uuid.uuid4())
                             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -342,7 +346,9 @@ elif st.session_state.page == "🤖 Model Training":
                                 "best_params": best_params,
                                 "model": model,
                                 "preprocessor": preprocessor,
-                                "feature_names": feature_names
+                                "feature_names": feature_names,
+                                "y_test": y_test,
+                                "y_pred": y_pred
                             })
                             
                             st.session_state.models[model_name] = {
@@ -350,7 +356,9 @@ elif st.session_state.page == "🤖 Model Training":
                                 "metrics": metrics,
                                 "preprocessor": preprocessor,
                                 "feature_names": feature_names,
-                                "best_params": best_params
+                                "best_params": best_params,
+                                "y_test": y_test,
+                                "y_pred": y_pred
                             }
                             
                             comparison_data.append({
@@ -413,7 +421,8 @@ elif st.session_state.page == "🤖 Model Training":
                             st.write("Best Parameters:")
                             st.json(model_info["best_params"])
                     with col2:
-                        fig = plot_confusion_matrix(y_test, metrics['y_pred'])
+                        # Use stored y_test and y_pred
+                        fig = plot_confusion_matrix(model_info["y_test"], model_info["y_pred"])
                         fig.update_traces(hovertemplate="Predicted: %{x}<br>Actual: %{y}<br>Count: %{z}")
                         fig.update_layout(width=600, height=400, margin=dict(l=50, r=50, t=50, b=50))
                         st.plotly_chart(fig, use_container_width=False)
@@ -569,7 +578,7 @@ elif st.session_state.page == "📊 Results":
             else:
                 attendance_valid = True
             
-            use_historical_ids = st.checkbox("Use Historical Student IDs", value=False, disabled=not bool(st.session_state.data))
+            use_historical_ids = st.checkbox("Use Historical Student IDs", value=False, disabled=st.session_state.data is None)
             
             if st.button("Generate Current Year Data") and gender_dist is not None and attendance_valid:
                 try:
