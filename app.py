@@ -38,6 +38,7 @@ def clear_session_state():
     st.session_state.patterns = []
     st.session_state.page = "📝 Data Configuration"
     st.session_state.compare_models = []
+    st.session_state.high_risk_baselines = None
 
 # Initialize session state
 if 'data' not in st.session_state:
@@ -62,6 +63,8 @@ if 'compare_models' not in st.session_state:
     st.session_state.compare_models = []
 if 'selected_group_by' not in st.session_state:
     st.session_state.selected_group_by = None
+if 'high_risk_baselines' not in st.session_state:
+    st.session_state.high_risk_baselines = None
 
 # Sidebar navigation with radio buttons
 st.sidebar.title("Navigation")
@@ -80,6 +83,19 @@ if st.sidebar.button("Clear All Data"):
     clear_session_state()
     st.experimental_rerun()
 
+# Compute high-risk baselines if historical data exists
+def compute_high_risk_baselines(data):
+    if data is not None:
+        high_risk = data[data["CA_Status"] == "CA"]
+        if not high_risk.empty:
+            return {
+                "Attendance_Percentage": high_risk["Attendance_Percentage"].mean(),
+                "Academic_Performance": high_risk["Academic_Performance"].mean(),
+                "Suspensions": high_risk["Suspensions"].mean(),
+                "Transportation": high_risk["Transportation"].mode().iloc[0] if not high_risk["Transportation"].empty else "Unknown"
+            }
+    return None
+
 # Page 1: Data Configuration
 if st.session_state.page == "📝 Data Configuration":
     st.markdown("""
@@ -94,10 +110,10 @@ if st.session_state.page == "📝 Data Configuration":
     st.header("Generate Historical Data")
     num_students = st.slider("Number of Students", 100, 5000, 1000)
     year_start, year_end = st.slider("Academic Years", 2020, 2025, (2020, 2024), step=1)
-    school_prefix = st.text_input("School Prefix (e.g., 10U)", "10U001")
-    num_schools = st.number_input("Number of Schools", 1, 50,5)
+    school_prefix = st.text_input("School Prefix (e.g., 10U)", "10U")
+    num_schools = st.number_input("Number of Schools", 1, 10, 3)
     id_length = st.radio("Student ID Length", [5, 7], index=0)
-    dropoff_percent = st.slider("Target Drop Off Percentage (%)", 0, 50, 2, step=5, help="Percentage of students with CA Status = CA")
+    dropoff_percent = st.slider("Target Drop Off Percentage (%)", 5, 50, 20, step=5, help="Percentage of students with CA Status = CA and Drop_Off = Y")
     
     grades = st.multiselect("Grades", list(range(1, 13)), default=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
     
@@ -115,14 +131,29 @@ if st.session_state.page == "📝 Data Configuration":
     
     meal_codes = st.multiselect("Meal Codes", ["Free", "Reduced", "Paid"], default=["Free", "Reduced", "Paid"])
     academic_perf = st.slider("Academic Performance Range (%)", 1, 100, (40, 90))
+    if academic_perf[0] >= academic_perf[1]:
+        st.error("Academic Performance Range: Minimum must be less than maximum.")
+        academic_perf_valid = False
+    else:
+        academic_perf_valid = True
     
     transportation = st.multiselect("Transportation Options", ["Bus", "Walk", "Car"], default=["Bus", "Walk"])
     suspensions_range = st.slider("Suspensions Range (per year)", 0, 10, (0, 3))
+    if suspensions_range[0] >= suspensions_range[1]:
+        st.error("Suspensions Range: Minimum must be less than maximum.")
+        suspensions_valid = False
+    else:
+        suspensions_valid = True
     
     st.subheader("Attendance Data")
     total_days = 180
     st.write(f"Total School Days: {total_days}")
-    present_days_range = st.slider("Present Days Range", 0, total_days, (100, total_days))
+    present_days_range = st.slider("Present Days Range", 0, total_days, (100, 180))
+    if present_days_range[0] >= present_days_range[1]:
+        st.error("Present Days Range: Minimum must be less than maximum.")
+        present_days_valid = False
+    else:
+        present_days_valid = True
     
     max_absent_days = total_days - present_days_range[0]
     if max_absent_days <= 0:
@@ -135,6 +166,11 @@ if st.session_state.page == "📝 Data Configuration":
         (0, min(80, max_absent_days)),
         help=f"Maximum absent days cannot exceed {max_absent_days}."
     )
+    if absent_days_range[0] >= absent_days_range[1]:
+        st.error("Absent Days Range: Minimum must be less than maximum.")
+        absent_days_valid = False
+    else:
+        absent_days_valid = True
     
     attendance_valid = True
     if max_absent_days <= 0:
@@ -168,7 +204,8 @@ if st.session_state.page == "📝 Data Configuration":
                 st.session_state.custom_fields.pop(i)
                 st.experimental_rerun()
     
-    if st.button("Generate Historical Data", disabled=not (gender_dist is not None and attendance_valid)):
+    generate_disabled = not (gender_dist is not None and attendance_valid and academic_perf_valid and suspensions_valid and present_days_valid and absent_days_valid)
+    if st.button("Generate Historical Data", disabled=generate_disabled):
         try:
             st.session_state.patterns = []
             custom_fields = [(f["name"], f["values"]) for f in st.session_state.custom_fields if f["name"] and f["values"]]
@@ -179,6 +216,7 @@ if st.session_state.page == "📝 Data Configuration":
                 custom_fields, id_length, dropoff_percent
             )
             st.session_state.data = data
+            st.session_state.high_risk_baselines = compute_high_risk_baselines(data)
             st.success("Data generated successfully!")
             
             st.subheader("Data Preview")
@@ -209,13 +247,14 @@ elif st.session_state.page == "🤖 Model Training":
             try:
                 st.session_state.data = pd.read_csv(uploaded_file)
                 st.session_state.patterns = []
+                st.session_state.high_risk_baselines = compute_high_risk_baselines(st.session_state.data)
                 st.success("Data uploaded successfully!")
             except Exception as e:
                 st.error(f"Error uploading data: {str(e)}")
     
     if st.session_state.data is not None:
         st.subheader("Feature Selection")
-        excluded_features = ["Student_ID", "CA_Status"]
+        excluded_features = ["Student_ID", "CA_Status", "Drop_Off"]
         available_features = [col for col in st.session_state.data.columns if col not in excluded_features]
         feature_toggles = {}
         st.write("Toggle Features:")
@@ -514,7 +553,7 @@ elif st.session_state.page == "📊 Results":
         school_prefix = st.text_input("School Prefix (e.g., CU)", "CU")
         num_schools = st.number_input("Number of Schools", 1, 10, 3)
         id_length = st.radio("Student ID Length", [5, 7], index=0)
-        dropoff_percent = st.slider("Target Drop Off Percentage (%)", 5, 50, 20, step=5, help="Percentage of students with CA Status = CA")
+        dropoff_percent = st.slider("Target Drop Off Percentage (%)", 5, 50, 20, step=5, help="Percentage of students with CA Status = CA and Drop_Off = Y")
         
         grades = st.multiselect("Grades", list(range(1, 13)), default=[1, 2, 3, 4, 5], key="current_grades")
         
@@ -532,14 +571,29 @@ elif st.session_state.page == "📊 Results":
         
         meal_codes = st.multiselect("Meal Codes", ["Free", "Reduced", "Paid"], default=["Free", "Reduced", "Paid"], key="current_meal")
         academic_perf = st.slider("Academic Performance Range (%)", 1, 100, (40, 90), key="current_academic")
+        if academic_perf[0] >= academic_perf[1]:
+            st.error("Academic Performance Range: Minimum must be less than maximum.")
+            academic_perf_valid = False
+        else:
+            academic_perf_valid = True
         
         transportation = st.multiselect("Transportation Options", ["Bus", "Walk", "Car"], default=["Bus", "Walk"], key="current_transport")
         suspensions_range = st.slider("Suspensions Range (per year)", 0, 10, (0, 3), key="current_suspensions")
+        if suspensions_range[0] >= suspensions_range[1]:
+            st.error("Suspensions Range: Minimum must be less than maximum.")
+            suspensions_valid = False
+        else:
+            suspensions_valid = True
         
         st.subheader("Attendance Data")
         total_days = 180
         st.write(f"Total School Days: {total_days}")
-        present_days_range = st.slider("Present Days Range", 0, total_days, (100, total_days), key="current_present")
+        present_days_range = st.slider("Present Days Range", 0, total_days, (100, 180), key="current_present")
+        if present_days_range[0] >= present_days_range[1]:
+            st.error("Present Days Range: Minimum must be less than maximum.")
+            present_days_valid = False
+        else:
+            present_days_valid = True
         
         max_absent_days = total_days - present_days_range[0]
         if max_absent_days <= 0:
@@ -553,6 +607,11 @@ elif st.session_state.page == "📊 Results":
             key="current_absent",
             help=f"Maximum absent days cannot exceed {max_absent_days}."
         )
+        if absent_days_range[0] >= absent_days_range[1]:
+            st.error("Absent Days Range: Minimum must be less than maximum.")
+            absent_days_valid = False
+        else:
+            absent_days_valid = True
         
         attendance_valid = True
         if max_absent_days <= 0:
@@ -594,7 +653,8 @@ elif st.session_state.page == "📊 Results":
                     st.session_state.current_custom_fields.pop(i)
                     st.experimental_rerun()
         
-        if st.button("Generate Current Year Data", disabled=not (gender_dist is not None and attendance_valid)):
+        generate_disabled = not (gender_dist is not None and attendance_valid and academic_perf_valid and suspensions_valid and present_days_valid and absent_days_valid)
+        if st.button("Generate Current Year Data", disabled=generate_disabled):
             try:
                 custom_fields = [(f["name"], f["values"]) for f in st.session_state.current_custom_fields if f["name"] and f["values"]]
                 historical_data = st.session_state.data if use_historical_ids and st.session_state.data is not None else None
@@ -631,7 +691,7 @@ elif st.session_state.page == "📊 Results":
     if st.session_state.current_data is not None and st.session_state.models:
         st.subheader("Run Predictions")
         selected_model = st.selectbox("Select Model", list(st.session_state.models.keys()))
-        excluded_columns = ["Student_ID", "CA_Prediction", "CA_Probability", "Drop_Off_Percent"]
+        excluded_columns = ["Student_ID", "CA_Prediction", "CA_Probability", "Drop_Off", "Prediction_Causes"]
         available_features = [col for col in st.session_state.current_data.columns if col not in excluded_columns]
         feature_toggles = {}
         st.write("Toggle Features:")
@@ -645,7 +705,7 @@ elif st.session_state.page == "📊 Results":
             "Group Drop Off % By",
             group_by_options,
             index=group_by_options.index(st.session_state.selected_group_by) if st.session_state.selected_group_by in group_by_options else 0,
-            help="Select a feature to visualize the percentage of students predicted as chronically absent (CA) for each group. This uses existing predictions and does not require re-running the model."
+            help="Select a feature to visualize the percentage of students predicted as chronically absent (CA) for each group."
         )
         st.session_state.selected_group_by = group_by_feature
         
@@ -665,19 +725,42 @@ elif st.session_state.page == "📊 Results":
                 prediction_data = st.session_state.current_data.copy()
                 prediction_data["CA_Prediction"] = predictions
                 prediction_data["CA_Probability"] = probabilities
+                prediction_data["Drop_Off"] = prediction_data["CA_Prediction"].apply(lambda x: "Y" if x == "CA" else "N")
+                
+                # Identify prediction causes based on patterns
+                def identify_causes(row):
+                    causes = []
+                    if row["CA_Prediction"] == "CA":
+                        for pattern in st.session_state.patterns:
+                            pattern_text = pattern["pattern"].lower()
+                            if "attendance" in pattern_text and row["Attendance_Percentage"] < (st.session_state.high_risk_baselines["Attendance_Percentage"] if st.session_state.high_risk_baselines else 80):
+                                causes.append(pattern["pattern"])
+                            if "grade" in pattern_text and str(row["Grade"]) in pattern_text:
+                                causes.append(pattern["pattern"])
+                            if "transportation" in pattern_text and row["Transportation"] in pattern_text:
+                                causes.append(pattern["pattern"])
+                            if "suspensions" in pattern_text and row["Suspensions"] > (st.session_state.high_risk_baselines["Suspensions"] if st.session_state.high_risk_baselines else 0):
+                                causes.append(pattern["pattern"])
+                    return ", ".join(causes) if causes else "None"
+                
+                prediction_data["Prediction_Causes"] = prediction_data.apply(identify_causes, axis=1)
                 
                 # Calculate Drop Off % for the selected group
-                if group_by_feature:
-                    dropoff_data = prediction_data.groupby(group_by_feature)["CA_Prediction"].value_counts(normalize=True).unstack().fillna(0)
-                    if "CA" in dropoff_data.columns:
-                        dropoff_data["Drop_Off_Percent"] = dropoff_data["CA"] * 100
-                        dropoff_data = dropoff_data[["Drop_Off_Percent"]].reset_index()
-                        prediction_data = prediction_data.merge(
-                            dropoff_data[[group_by_feature, "Drop_Off_Percent"]],
-                            on=group_by_feature,
-                            how="left"
-                        )
-                    else:
+                if group_by_feature and "CA_Prediction" in prediction_data.columns:
+                    try:
+                        dropoff_data = prediction_data.groupby(group_by_feature)["CA_Prediction"].value_counts(normalize=True).unstack().fillna(0)
+                        if "CA" in dropoff_data.columns:
+                            dropoff_data["Drop_Off_Percent"] = dropoff_data["CA"] * 100
+                            dropoff_data = dropoff_data[["Drop_Off_Percent"]].reset_index()
+                            prediction_data = prediction_data.merge(
+                                dropoff_data[[group_by_feature, "Drop_Off_Percent"]],
+                                on=group_by_feature,
+                                how="left"
+                            )
+                        else:
+                            prediction_data["Drop_Off_Percent"] = 0.0
+                    except Exception as e:
+                        st.warning(f"Error calculating Drop Off % for {group_by_feature}: {str(e)}")
                         prediction_data["Drop_Off_Percent"] = 0.0
                 
                 if use_historical_ids and "Student_ID" in prediction_data.columns and st.session_state.data is not None:
@@ -722,7 +805,7 @@ elif st.session_state.page == "📊 Results":
                 fig.update_traces(hovertemplate="Grade: %{y}<br>Prediction: %{x}<br>Count: %{z}")
                 st.plotly_chart(fig)
                 
-                if group_by_feature:
+                if group_by_feature and "Drop_Off_Percent" in st.session_state.current_data.columns:
                     dropoff_data = st.session_state.current_data.groupby(group_by_feature)["CA_Prediction"].value_counts(normalize=True).unstack().fillna(0)
                     if "CA" in dropoff_data.columns:
                         dropoff_data["Drop_Off_Percent"] = dropoff_data["CA"] * 100
@@ -732,7 +815,7 @@ elif st.session_state.page == "📊 Results":
                             values="Drop_Off_Percent",
                             names=group_by_feature,
                             title=f"Drop Off Percentage by {group_by_feature}",
-                            hole=0.4,  # Make it a donut chart
+                            hole=0.4,
                             color_discrete_sequence=px.colors.sequential.Reds
                         )
                         fig.update_traces(
@@ -771,8 +854,50 @@ elif st.session_state.page == "📊 Results":
                         
                         ca_prob = student_data["CA_Probability"].iloc[0]
                         ca_pred = student_data["CA_Prediction"].iloc[0]
+                        drop_off = student_data["Drop_Off"].iloc[0]
+                        causes = student_data["Prediction_Causes"].iloc[0]
                         st.write(f"**CA Prediction**: {ca_pred}")
                         st.write(f"**CA Probability**: {ca_prob:.2f}")
+                        st.write(f"**Drop Off**: {drop_off}")
+                        st.write(f"**Prediction Causes**: {causes}")
+                        
+                        # Lagging areas analysis
+                        if st.session_state.high_risk_baselines:
+                            st.write("**Lagging Areas (Compared to High-Risk Average)**")
+                            lagging_data = []
+                            if student_data["Attendance_Percentage"].iloc[0] < st.session_state.high_risk_baselines["Attendance_Percentage"]:
+                                lagging_data.append({
+                                    "Metric": "Attendance",
+                                    "Student Value": f"{student_data['Attendance_Percentage'].iloc[0]:.2f}%",
+                                    "High-Risk Avg": f"{st.session_state.high_risk_baselines['Attendance_Percentage']:.2f}%",
+                                    "Status": "Lagging"
+                                })
+                            if student_data["Academic_Performance"].iloc[0] < st.session_state.high_risk_baselines["Academic_Performance"]:
+                                lagging_data.append({
+                                    "Metric": "Academic Performance",
+                                    "Student Value": f"{student_data['Academic_Performance'].iloc[0]:.2f}%",
+                                    "High-Risk Avg": f"{st.session_state.high_risk_baselines['Academic_Performance']:.2f}%",
+                                    "Status": "Lagging"
+                                })
+                            if student_data["Suspensions"].iloc[0] > st.session_state.high_risk_baselines["Suspensions"]:
+                                lagging_data.append({
+                                    "Metric": "Suspensions",
+                                    "Student Value": student_data["Suspensions"].iloc[0],
+                                    "High-Risk Avg": f"{st.session_state.high_risk_baselines['Suspensions']:.2f}",
+                                    "Status": "Lagging"
+                                })
+                            if student_data["Transportation"].iloc[0] == st.session_state.high_risk_baselines["Transportation"]:
+                                lagging_data.append({
+                                    "Metric": "Transportation",
+                                    "Student Value": student_data["Transportation"].iloc[0],
+                                    "High-Risk Avg": st.session_state.high_risk_baselines["Transportation"],
+                                    "Status": "Matches High-Risk Pattern"
+                                })
+                            
+                            if lagging_data:
+                                st.dataframe(pd.DataFrame(lagging_data))
+                            else:
+                                st.info("No significant lagging areas detected.")
                         
                         st.write("**Preventive Actions**")
                         actions = []
@@ -831,7 +956,6 @@ elif st.session_state.page == "📊 Results":
                         
                         st.write("**Attendance Trends**")
                         fig = go.Figure()
-                        # Include historical attendance data if available
                         historical_attendance = st.session_state.data[
                             st.session_state.data["Student_ID"] == st.session_state.selected_student_id
                         ][["Year", "Attendance_Percentage"]].sort_values("Year") if st.session_state.data is not None else pd.DataFrame()
@@ -878,198 +1002,4 @@ elif st.session_state.page == "📚 Documentation":
         st.header("Patterns & Correlations Visualizer Dashboard")
         high_risk = st.session_state.data[st.session_state.data["CA_Status"] == "CA"]
         if not high_risk.empty:
-            st.subheader("Discovered Patterns")
-            if st.session_state.patterns:
-                with st.expander("View Discovered Patterns", expanded=False):
-                    for i, pattern in enumerate(st.session_state.patterns):
-                        col1, col2, col3 = st.columns([4, 1, 1])
-                        with col1:
-                            st.write(f"- {pattern['pattern']}: {pattern['explanation']}")
-                        with col2:
-                            if st.button("Edit", key=f"edit_pattern_{i}"):
-                                st.session_state.edit_pattern_index = i
-                        with col3:
-                            if st.button("Delete", key=f"delete_pattern_{i}"):
-                                st.session_state.patterns.pop(i)
-                                st.experimental_rerun()
-                
-                if 'edit_pattern_index' in st.session_state:
-                    st.subheader("Edit Pattern")
-                    idx = st.session_state.edit_pattern_index
-                    new_pattern = st.text_input("Pattern", value=st.session_state.patterns[idx]["pattern"])
-                    new_explanation = st.text_area("Explanation", value=st.session_state.patterns[idx]["explanation"])
-                    if st.button("Save Changes"):
-                        st.session_state.patterns[idx] = {"pattern": new_pattern, "explanation": new_explanation}
-                        del st.session_state.edit_pattern_index
-                        st.experimental_rerun()
-            
-            st.subheader("Add New Pattern")
-            new_pattern = st.text_input("New Pattern")
-            new_explanation = st.text_area("Pattern Explanation")
-            if st.button("Add Pattern"):
-                if new_pattern and new_explanation:
-                    st.session_state.patterns.append({"pattern": new_pattern, "explanation": new_explanation})
-                    st.success("Pattern added successfully!")
-                    st.experimental_rerun()
-            
-            st.subheader("Correlation Visualizations")
-            numeric_cols = st.session_state.data.select_dtypes(include=[np.number]).columns
-            corr = st.session_state.data[numeric_cols].corr()
-            fig = px.imshow(corr, title="Correlation Heatmap of Features", labels={"color": "Correlation"})
-            st.plotly_chart(fig)
-            
-            st.write("**Correlation with Attendance**")
-            corr_attendance = corr["Attendance_Percentage"].drop("Attendance_Percentage")
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=corr_attendance.index,
-                y=corr_attendance.values,
-                marker_color=np.where(corr_attendance > 0, "#3498db", "#e74c3c")
-            ))
-            fig.update_layout(
-                title="Correlation of Attendance with Other Factors",
-                xaxis_title="Feature",
-                yaxis_title="Correlation Coefficient"
-            )
-            st.plotly_chart(fig)
-            
-            st.write("**Attendance vs. Suspensions**")
-            fig = px.scatter(st.session_state.data, x="Suspensions", y="Attendance_Percentage", 
-                           color="CA_Status", title="Attendance vs. Suspensions")
-            st.plotly_chart(fig)
-        
-        st.header("AI-Powered Pattern Recognition")
-        if st.session_state.models:
-            displayed = False
-            for model_name in ["Random Forest", "Decision Tree", "Gradient Boosting"]:
-                if model_name in st.session_state.models:
-                    model_info = st.session_state.models[model_name]
-                    fig = plot_feature_importance(model_info["model"], model_info["feature_names"])
-                    if fig:
-                        st.write(f"Key factors influencing absenteeism (based on {model_name} feature importance):")
-                        st.plotly_chart(fig)
-                        displayed = True
-                        break
-            if not displayed:
-                st.write("No feature importance available. Train a Random Forest, Decision Tree, or Gradient Boosting model.")
-        else:
-            st.info("Train models to enable AI-powered pattern recognition.")
-        
-        st.header("Group Analysis & Comparisons")
-        st.write("""
-        **Purpose of Analysis**: Use the dropdown to visualize Drop Off % for each value of a selected feature (e.g., Grade, Gender, or custom fields like Extracurricular) in the current-year data. Optional filters allow you to subset historical data for deeper analysis of attendance trends.
-        """)
-        
-        # Dropdown for selecting field to visualize Drop Off %
-        if st.session_state.current_data is not None and "CA_Prediction" in st.session_state.current_data.columns:
-            group_by_options = [col for col in st.session_state.current_data.columns if st.session_state.current_data[col].dtype == "object" or col == "Grade"]
-            group_by_options += [f["name"] for f in st.session_state.current_custom_fields if f["name"] in st.session_state.current_data.columns]
-            group_by_field = st.selectbox("Visualize Drop Off % By", group_by_options, key="group_analysis_field")
-            
-            if group_by_field:
-                dropoff_data = st.session_state.current_data.groupby(group_by_field)["CA_Prediction"].value_counts(normalize=True).unstack().fillna(0)
-                if "CA" in dropoff_data.columns:
-                    dropoff_data["Drop_Off_Percent"] = dropoff_data["CA"] * 100
-                    dropoff_data = dropoff_data[["Drop_Off_Percent"]].reset_index()
-                    fig = px.bar(
-                        dropoff_data,
-                        x=group_by_field,
-                        y="Drop_Off_Percent",
-                        title=f"Drop Off Percentage by {group_by_field}",
-                        labels={"Drop_Off_Percent": "Drop Off Percentage (%)"},
-                        color="Drop_Off_Percent",
-                        color_continuous_scale="Reds"
-                    )
-                    fig.update_traces(hovertemplate=f"{group_by_field}: %{{x}}<br>Drop Off %: %{{y:.2f}}%")
-                    st.plotly_chart(fig)
-                else:
-                    st.warning(f"No students predicted as CA for grouping by {group_by_field}.")
-        
-        # Optional filters for historical data
-        with st.expander("Advanced Filters for Historical Data", expanded=False):
-            st.write("Filter historical data to analyze specific student cohorts:")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                filter_grade = st.multiselect("Filter by Grade", sorted(st.session_state.data["Grade"].unique()), key="filter_grade")
-                filter_gender = st.multiselect("Filter by Gender", st.session_state.data["Gender"].unique(), key="filter_gender")
-            with col2:
-                filter_school = st.multiselect("Filter by School", st.session_state.data["School"].unique(), key="filter_school")
-                filter_meal = st.multiselect("Filter by Meal Code", st.session_state.data["Meal_Code"].unique(), key="filter_meal")
-            with col3:
-                filter_transport = st.multiselect("Filter by Transportation", st.session_state.data["Transportation"].unique(), key="filter_transport")
-            
-            filtered_data = st.session_state.data
-            if filter_grade:
-                filtered_data = filtered_data[filtered_data["Grade"].isin(filter_grade)]
-            if filter_gender:
-                filtered_data = filtered_data[filtered_data["Gender"].isin(filter_gender)]
-            if filter_school:
-                filtered_data = filtered_data[filtered_data["School"].isin(filter_school)]
-            if filter_meal:
-                filtered_data = filtered_data[filtered_data["Meal_Code"].isin(filter_meal)]
-            if filter_transport:
-                filtered_data = filtered_data[filtered_data["Transportation"].isin(filter_transport)]
-            
-            st.write("**Attendance Trends by Group**")
-            if not filtered_data.empty:
-                group_by = st.selectbox("Group By", ["Grade", "Gender", "School", "Meal_Code", "Transportation"], key="historical_group_by")
-                trend_data = filtered_data.groupby(group_by)["Attendance_Percentage"].mean().reset_index()
-                fig = px.bar(trend_data, x=group_by, y="Attendance_Percentage", title=f"Average Attendance by {group_by}")
-                st.plotly_chart(fig)
-                
-                fig = px.box(filtered_data, x=group_by, y="Attendance_Percentage", title=f"Attendance Distribution by {group_by}")
-                st.plotly_chart(fig)
-        
-        st.subheader("Advanced Attendance Visualizations")
-        if not high_risk.empty:
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                if st.session_state.current_data is not None:
-                    hist_trend = high_risk.groupby("Grade")["Attendance_Percentage"].mean().reset_index()
-                    hist_trend["Dataset"] = "Historical"
-                    curr_trend = st.session_state.current_data.groupby("Grade")["Attendance_Percentage"].mean().reset_index()
-                    curr_trend["Dataset"] = "Current Year"
-                    combined_trend = pd.concat([hist_trend, curr_trend], ignore_index=True)
-                    
-                    plt.figure(figsize=(10, 6))
-                    sns.barplot(data=combined_trend, x="Grade", y="Attendance_Percentage", hue="Dataset", palette="Blues")
-                    plt.title("Average Attendance by Grade: Historical vs. Current Year")
-                    plt.xlabel("Grade")
-                    plt.ylabel("Average Attendance (%)")
-                    plt.legend(title="Dataset")
-                    bar_plot_path = os.path.join(tmpdirname, "attendance_bar.png")
-                    plt.savefig(bar_plot_path, bbox_inches="tight")
-                    plt.close()
-                    st.image(bar_plot_path, caption="Grouped Bar Plot of Average Attendance by Grade")
-                
-                plt.figure(figsize=(10, 6))
-                sns.violinplot(data=high_risk, x="Grade", y="Attendance_Percentage", palette="Blues")
-                plt.title("Attendance Distribution by Grade (Historical Data)")
-                plt.xlabel("Grade")
-                plt.ylabel("Attendance Percentage (%)")
-                violin_plot_path = os.path.join(tmpdirname, "attendance_violin.png")
-                plt.savefig(violin_plot_path, bbox_inches="tight")
-                plt.close()
-                st.image(violin_plot_path, caption="Violin Plot of Attendance Distribution by Grade")
-        
-        st.header("Intervention Recommendations")
-        if not high_risk.empty:
-            with st.expander("Why Historical Data?", expanded=False):
-                st.markdown("""
-                **Why Historical Data?**
-
-                Historical data for high-risk students (CA Status = CA) helps identify patterns and risk factors. Key features like attendance, academic performance, suspensions, and transportation reveal characteristics:
-                - Low attendance indicates chronic absence.
-                - Poor academic performance may show disengagement.
-                - Suspensions suggest behavioral challenges.
-                - Transportation issues may limit access.
-
-                These insights inform targeted interventions like tutoring, counseling, or transportation support.
-                """)
-            
-            st.write("High-risk students (CA Status = CA):")
-            st.dataframe(high_risk[["Student_ID", "Attendance_Percentage", "Academic_Performance", "Suspensions", "Transportation"]])
-            st.write("Recommended Actions:")
-            st.write("- **Tutoring Programs**: For low academic performance.")
-            st.write("- **Counseling Services**: For high absence rates or suspensions.")
-            st.write("- **Parental Engagement**: Contact families of high-risk students.")
-            st.write("- **Transportation Support**: Assist students with unreliable transportation.")
+            st.subheader("Discovered
