@@ -518,20 +518,19 @@ elif st.session_state.page == "🤖 Model Training":
                                     height=400,
                                     margin=dict(l=50, r=50, t=50, b=50)
                                 )
-                                with st.expander("About Model Comparison Chart"):
-                                    st.markdown("""
-                                    **About Model Comparison Chart**
+                                st.markdown("""
+                                **About Model Comparison Chart**
 
-                                    This bar chart compares the performance of selected model versions across key metrics:
-                                    - **Accuracy**: Proportion of correct predictions.
-                                    - **Precision**: Proportion of positive predictions that were correct.
-                                    - **Recall**: Proportion of actual positives correctly identified.
-                                    - **F1 Score**: Harmonic mean of precision and recall.
-                                    - **ROC AUC**: Area under the receiver operating characteristic curve, measuring model discrimination.
+                                This bar chart compares the performance of selected model versions across key metrics:
+                                - **Accuracy**: Proportion of correct predictions.
+                                - **Precision**: Proportion of positive predictions that were correct.
+                                - **Recall**: Proportion of actual positives correctly identified.
+                                - **F1 Score**: Harmonic mean of precision and recall.
+                                - **ROC AUC**: Area under the receiver operating characteristic curve, measuring model discrimination.
 
-                                    Use this to identify the best-performing models for chronic absenteeism prediction.
-                                    Hover over bars to see exact metric values.
-                                    """)
+                                Use this to identify the best-performing models for chronic absenteeism prediction.
+                                Hover over bars to see exact metric values.
+                                """)
                                 st.plotly_chart(fig, use_container_width=False)
                         else:
                             st.warning("Please select at least one model to compare.")
@@ -1198,17 +1197,16 @@ elif st.session_state.page == "📚 Documentation":
         
         with st.expander("Dataset Comparison"):
             st.subheader("Dataset Comparison Heatmap")
-            with st.expander("About Dataset Comparison Heatmap"):
-                st.markdown("""
-                **About Dataset Comparison Heatmap**
+            st.markdown("""
+            **About Dataset Comparison Heatmap**
 
-                This heatmap compares a selected metric (e.g., average attendance) across datasets by group (e.g., Grade, School).
-                - **Normalized values (0-1)**: Ensures fair comparison across datasets.
-                - **Blue gradient**: Darker blues indicate higher values.
-                - **Filters**: Select grouping variables and metrics to customize the view.
-                - **Hover**: Shows exact values and dataset details.
-                - Use this to identify trends or differences across historical and current datasets.
-                """)
+            This heatmap compares a selected metric (e.g., average attendance) across datasets by group (e.g., Grade, School).
+            - **Normalized values (0-1)**: Ensures fair comparison across datasets.
+            - **Blue gradient**: Darker blues indicate higher values.
+            - **Filters**: Select grouping variables and metrics to customize the view.
+            - **Hover**: Shows exact values and dataset details.
+            - Use this to identify trends or differences across historical and current datasets.
+            """)
             
             if st.session_state.datasets or st.session_state.current_data is not None:
                 group_vars = ["Grade", "School", "Gender", "Meal_Code", "Transportation"]
