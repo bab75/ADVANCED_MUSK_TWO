@@ -134,3 +134,24 @@ def get_model_explanation(model_name, X_test, model):
             return f"Error generating SHAP explanation for {model_name}: {str(e)}"
     else:
         return f"SHAP explanations are not available because the 'shap' library is not installed."
+def identify_patterns(X_train, y_train, features, model):
+    """Identify patterns in model behavior"""
+    try:
+        if hasattr(model, 'feature_importances_'):
+            return sorted(zip(features, model.feature_importances_),
+                          key=lambda x: x[1], reverse=True)
+        return []
+    except Exception as e:
+        print(f"Pattern identification error: {str(e)}")
+        return []
+
+def explain_prediction(row, features, patterns, baselines):
+    """Generate prediction explanation"""
+    try:
+        explanation = []
+        for feature in features:
+            value = row[feature]
+            baseline = baselines.get(feature, {}).get('mean', 0)
+            if value > baseline + baselines.get(feature, {}).get('std', 0):
+                explanation.append(f"High {feature} ({value:.2f})")
+        return ", ".join(explanation) if explanation else "No 
