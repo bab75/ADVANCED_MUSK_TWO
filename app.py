@@ -418,7 +418,7 @@ elif st.session_state.page == "🤖 Model Training":
                         common_transport = f"Common Transportation: {', '.join(high_risk['Transportation'].mode().tolist())}"
                         
                         existing_patterns = [p["pattern"] for p in st.session_state.patterns]
-                        for pattern in [low_attendance, common_grades, common_meal_codes, common  scommon_transport]:
+                        for pattern in [low_attendance, common_grades, common_meal_codes, scommon_transport]:
                             if pattern not in existing_patterns:
                                 patterns.append({"pattern": pattern, "explanation": "Identified in high-risk students"})
                         
