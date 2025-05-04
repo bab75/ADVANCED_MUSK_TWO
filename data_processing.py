@@ -42,12 +42,13 @@ def preprocess_data(X, categorical_cols, numerical_cols):
     return X_processed, preprocessor, feature_names
 
 def combine_datasets(datasets):
-    """Combine multiple datasets, ensuring column consistency."""
+    """Combine multiple datasets, ensuring column consistency and target presence."""
     if not datasets:
         raise ValueError("No datasets provided.")
+    for data in datasets:
+        required_columns = ["Student_ID", "CA_Status", "Drop_Off"]
+        missing_cols = [col for col in required_columns if col not in data.columns]
+        if missing_cols:
+            raise ValueError(f"Dataset missing required columns: {missing_cols}")
     combined = pd.concat(datasets, ignore_index=True)
-    required_columns = ["Student_ID", "CA_Status", "Drop_Off"]
-    missing_cols = [col for col in required_columns if col not in combined.columns]
-    if missing_cols:
-        raise ValueError(f"Combined dataset missing required columns: {missing_cols}")
     return combined
