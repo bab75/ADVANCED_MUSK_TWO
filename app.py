@@ -409,7 +409,10 @@ elif st.session_state.page == "🤖 Model Training":
                         try:
                             status_container.write(f"Training {model_name}...")
                             if enable_tuning and model_name in tuning_params:
-                                model, metrics, best_params = tune_model(model_name, X_train_processed, y_train, X_test_processed, y_test, tuning_params[model_name])
+                                # Call tune_model with model_name, X_train, y_train, X_test, y_test, and custom_params
+                                model, metrics, best_params = tune_model(
+                                    model_name, X_train_processed, y_train, X_test_processed, y_test, tuning_params[model_name]
+                                )
                             else:
                                 model, metrics = train_model(model_name, X_train_processed, y_train, X_test_processed, y_test)
                                 best_params = None
@@ -1042,7 +1045,7 @@ elif st.session_state.page == "📊 Results":
                         suspensions = student_data["Suspensions"].iloc[0]
                         risk_score = (100 - attendance) * 0.4 + (100 - academic) * 0.3 + suspensions * 10
                         
-                        fig = go.Figure(go.Indicator(
+                        fig USD = go.Figure(go.Indicator(
                             mode="gauge+number",
                             value=risk_score,
                             title={"text": "Risk Assessment Score"},
@@ -1291,22 +1294,3 @@ elif st.session_state.page == "📚 Documentation":
         st.header("Intervention Recommendations")
         if not high_risk.empty:
             with st.expander("Why Historical Data?", expanded=False):
-                st.markdown("""
-                **Why Historical Data?**
-
-                Historical data for high-risk students (CA Status = CA) helps identify patterns and risk factors. Key features like attendance, academic performance, suspensions, and transportation reveal characteristics:
-                - Low attendance indicates chronic absence.
-                - Poor academic performance may show disengagement.
-                - Suspensions suggest behavioral challenges.
-                - Transportation issues may limit access.
-
-                These insights inform targeted interventions like tutoring, counseling, or transportation support.
-                """)
-            
-            st.write("High-risk students (CA Status = CA):")
-            st.dataframe(high_risk[["Student_ID", "Attendance_Percentage", "Academic_Performance", "Suspensions", "Transportation"]])
-            st.write("Recommended Actions:")
-            st.write("- **Tutoring Programs**: For low academic performance.")
-            st.write("- **Counseling Services**: For high absence rates or suspensions.")
-            st.write("- **Parental Engagement**: Contact families of high-risk students.")
-            st.write("- **Transportation Support**: Assist students with unreliable transportation.")
