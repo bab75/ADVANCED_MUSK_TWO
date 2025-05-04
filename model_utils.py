@@ -8,9 +8,15 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 from sklearn.multioutput import MultiOutputClassifier
-import shap
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
+
+# Try to import shap, set flag if not available
+try:
+    import shap
+    SHAP_AVAILABLE = True
+except ImportError:
+    SHAP_AVAILABLE = False
 
 def get_model(model_name):
     """Return the base model for a given model name."""
@@ -34,9 +40,9 @@ def train_model(model_name, X_train, y_train, X_test, y_test):
     for i, target in enumerate(y_train.columns):
         metrics[target] = {
             "accuracy": accuracy_score(y_test.iloc[:, i], y_pred[:, i]),
-            "precision": precision_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA"),
-            "recall": recall_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA"),
-            "f1": f1_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA"),
+            "precision": precision_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA", zero_division=0),
+            "recall": recall_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA", zero_division=0),
+            "f1": f1_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA", zero_division=0),
             "roc_auc": roc_auc_score(y_test.iloc[:, i], model.predict_proba(X_test)[:, i, 1]),
             "y_pred": y_pred[:, i]
         }
@@ -55,19 +61,22 @@ def tune_model(model_name, X_train, y_train, X_test, y_test, custom_params=None)
     for i, target in enumerate(y_train.columns):
         metrics[target] = {
             "accuracy": accuracy_score(y_test.iloc[:, i], y_pred[:, i]),
-            "precision": precision_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA"),
-            "recall": recall_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA"),
-            "f1": f1_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA"),
+            "precision": precision_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA", zero_division=0),
+            "recall": recall_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA", zero_division=0),
+            "f1": f1_score(y_test.iloc[:, i], y_pred[:, i], pos_label="CA", zero_division=0),
             "roc_auc": roc_auc_score(y_test.iloc[:, i], best_model.predict_proba(X_test)[:, i, 1]),
             "y_pred": y_pred[:, i]
         }
     return best_model, metrics, grid_search.best_params_
 
 def get_model_explanation(model_name, X_test, model):
-    """Generate model explanation using SHAP."""
-    try:
-        explainer = shap.KernelExplainer(model.predict_proba, X_test)
-        shap_values = explainer.shap_values(X_test)
-        return f"SHAP explanation for {model_name}: {shap_values}"
-    except Exception as e:
-        return f"Error generating explanation for {model_name}: {str(e)}"
+    """Generate model explanation using SHAP if available."""
+    if SHAP_AVAILABLE:
+        try:
+            explainer = shap.KernelExplainer(model.predict_proba, X_test)
+            shap_values = explainer.shap_values(X_test)
+            return f"SHAP explanation for {model_name}: {shap_values}"
+        except Exception as e:
+            return f"Error generating SHAP explanation for {model_name}: {str(e)}"
+    else:
+        return f"SHAP explanations are not available because the 'shap' library is not installed."
