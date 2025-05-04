@@ -92,11 +92,11 @@ if st.session_state.page == "📝 Data Configuration":
     
     st.header("Generate Historical Data")
     num_students = st.slider("Number of Students", 100, 5000, 1000)
-    year_start, year_end = st.slider("Academic Years", 2010, 2025, (2015, 2020), step=1)
+    year_start, year_end = st.slider("Academic Years", 2020, 2025, (2015, 2020), step=1)
     school_prefix = st.text_input("School Prefix (e.g., 10U)", "10U")
     num_schools = st.number_input("Number of Schools", 1, 10, 3)
     
-    grades = st.multiselect("Grades", list(range(1, 13)), default=[1, 2, 3, 4, 5])
+    grades = st.multiselect("Grades", list(range(1, 13)), default=[1, 2, 3, 4, 5,6, 7, 8, 9, 10, 11, 12])
     
     st.subheader("Gender Distribution (%)")
     male_dist = st.slider("Male (%)", 0, 100, 40, step=5)
