@@ -211,7 +211,7 @@ elif st.session_state.page == "🤖 Model Training":
     
     if st.session_state.data is not None:
         st.subheader("Feature Selection")
-        include_student_id = st.checkbox("Include Historical Student ID", value=True)
+        include_student_id = st.checkbox("Include Historical Student ID", value=False)
         excluded_features = ["CA_Status"]
         if not include_student_id:
             excluded_features.append("Student_ID")
@@ -632,28 +632,43 @@ elif st.session_state.page == "📊 Results":
     if st.session_state.current_data is not None and st.session_state.models:
         st.subheader("Run Predictions")
         selected_model = st.selectbox("Select Model", list(st.session_state.models.keys()))
-        available_features = [col for col in st.session_state.current_data.columns if col not in ["Student_ID", "CA_Prediction", "CA_Probability"]]
+        # Explicitly exclude non-feature columns
+        excluded_columns = ["Student_ID", "CA_Prediction", "CA_Probability"]
+        available_features = [col for col in st.session_state.current_data.columns if col not in excluded_columns]
         feature_toggles = {}
         st.write("Toggle Features:")
         for feature in available_features:
             feature_toggles[feature] = st.checkbox(feature, value=True, key=f"predict_feature_{feature}")
         features = [f for f, enabled in feature_toggles.items() if enabled]
         
+        # Dropdown for Drop Off % Bar grouping
+        group_by_options = [col for col in available_features if st.session_state.current_data[col].dtype == "object" or col == "Grade"]
+        group_by_feature = st.selectbox("Group Drop Off % By", group_by_options, key="group_by_dropoff")
+        
         if st.button("Predict"):
             try:
+                # Validate features
                 model_info = st.session_state.models[selected_model]
+                training_features = model_info["feature_names"]
+                missing_features = [f for f in features if f not in st.session_state.current_data.columns]
+                if missing_features:
+                    raise ValueError(f"Selected features not found in current data: {missing_features}")
+                
+                # Prepare data for prediction
                 X = st.session_state.current_data[features]
                 X_processed = model_info["preprocessor"].transform(X)
                 predictions = model_info["model"].predict(X_processed)
                 probabilities = model_info["model"].predict_proba(X_processed)[:, 1]
                 
-                # Store predictions in a new dataframe to avoid modifying original data
+                # Store predictions in a new dataframe
                 prediction_data = st.session_state.current_data.copy()
                 prediction_data["CA_Prediction"] = predictions
                 prediction_data["CA_Probability"] = probabilities
                 
-                # Merge historical data only if historical IDs were used and Student_ID exists
+                # Merge historical data if historical IDs are used
                 if use_historical_ids and "Student_ID" in prediction_data.columns and st.session_state.data is not None:
+                    if "Student_ID" not in st.session_state.data.columns:
+                        raise ValueError("Student_ID column missing in historical data")
                     historical_data = st.session_state.data[["Student_ID", "Attendance_Percentage", "Academic_Performance", "Suspensions"]]
                     prediction_data = prediction_data.merge(
                         historical_data, on="Student_ID", how="left", suffixes=("", "_Historical")
@@ -664,6 +679,7 @@ elif st.session_state.page == "📊 Results":
                 st.subheader("Prediction Results")
                 st.dataframe(st.session_state.current_data)
                 
+                # CA Probability Heatmap
                 heatmap_data = st.session_state.current_data.groupby(["Grade", "School"])["CA_Probability"].mean().unstack().fillna(0)
                 fig = px.imshow(
                     heatmap_data,
@@ -674,6 +690,7 @@ elif st.session_state.page == "📊 Results":
                 fig.update_traces(hovertemplate="Grade: %{y}<br>School: %{x}<br>CA Probability: %{z:.2f}")
                 st.plotly_chart(fig)
                 
+                # CA Probability Distribution
                 fig = px.histogram(
                     st.session_state.current_data,
                     x="CA_Probability",
@@ -684,6 +701,7 @@ elif st.session_state.page == "📊 Results":
                 fig.update_traces(hovertemplate="Probability: %{x:.2f}<br>Prediction: %{customdata[1]}<br>Count: %{y}")
                 st.plotly_chart(fig)
                 
+                # CA Prediction Heatmap
                 heatmap_data = st.session_state.current_data.groupby(["Grade", "CA_Prediction"]).size().unstack().fillna(0)
                 fig = px.imshow(
                     heatmap_data,
@@ -692,6 +710,22 @@ elif st.session_state.page == "📊 Results":
                 )
                 fig.update_traces(hovertemplate="Grade: %{y}<br>Prediction: %{x}<br>Count: %{z}")
                 st.plotly_chart(fig)
+                
+                # Drop Off % Bar
+                dropoff_data = st.session_state.current_data.groupby(group_by_feature)["CA_Prediction"].value_counts(normalize=True).unstack().fillna(0)
+                if "CA" in dropoff_data.columns:
+                    dropoff_data["Drop Off %"] = dropoff_data["CA"] * 100
+                    fig = px.bar(
+                        dropoff_data.reset_index(),
+                        x=group_by_feature,
+                        y="Drop Off %",
+                        title=f"Drop Off Percentage by {group_by_feature}",
+                        labels={"Drop Off %": "Drop Off Percentage (%)"},
+                        color="Drop Off %",
+                        color_continuous_scale="Reds"
+                    )
+                    fig.update_traces(hovertemplate=f"{group_by_feature}: %{{x}}<br>Drop Off %: %{{y:.2f}}%")
+                    st.plotly_chart(fig)
                 
                 csv = st.session_state.current_data.to_csv(index=False)
                 st.download_button("Download Predictions", csv, "predictions.csv", "text/csv")
