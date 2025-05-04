@@ -1,62 +1,80 @@
-/* General styling for section headers */
-.section-header {
-    display: flex;
-    align-items: center;
-    font-size: 2rem;
-    color: #3498db;
-    margin-bottom: 1rem;
+body {
+    font-family: 'Courier New', monospace;
+    background-color: #f5f5f5;
 }
 
-.header-icon {
-    width: 2rem;
-    height: 2rem;
-    margin-right: 0.5rem;
-}
-
-/* Styling for model icons */
 .model-icon {
     display: flex;
     align-items: center;
-    font-size: 1.5rem;
-    color: #3498db;
 }
 
 .model-icon svg {
-    width: 1.5rem;
-    height: 1.5rem;
-    margin-right: 0.5rem;
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
 }
 
-/* Styling for student analysis container */
-.student-analysis-container {
-    padding: 1rem;
-    border: 1px solid #e0e0e0;
-    border-radius: 0.5rem;
-    background-color: #f9f9f9;
+h1, h2, h3 {
+    color: #2c3e50;
+    font-weight: bold;
 }
 
-/* Styling for action items */
-.action-item {
+.stButton>button {
+    background-color: #3498db;
+    color: white;
+    border-radius: 5px;
+    font-family: 'Courier New', monospace;
+    padding: 8px 16px;
+}
+
+.stButton>button:hover {
+    background-color: #2980b9;
+}
+
+.stTextInput>div>input {
+    border: 1px solid #3498db;
+    border-radius: 5px;
+}
+
+.stRadio > div {
     display: flex;
-    align-items: center;
-    margin: 0.5rem 0;
+    flex-direction: column;
+    gap: 10px;
 }
 
-.action-icon {
-    width: 1.2rem;
-    height: 1.2rem;
-    margin-right: 0.5rem;
+.stRadio > div > label {
+    font-family: 'Courier New', monospace;
+    color: #2c3e50;
+    font-size: 16px;
+    padding: 5px;
+    border-radius: 5px;
 }
 
-/* Constrain Plotly chart containers */
-.plotly-chart-container {
-    max-width: 600px;
-    max-height: 400px;
-    margin: 0 auto;
+.stRadio > div > label:hover {
+    background-color: #ecf0f1;
 }
 
-/* Ensure Plotly charts respect container size */
-div[data-testid="stPlotlyChart"] {
-    max-width: 600px !important;
-    max-height: 400px !important;
+.stExpander {
+    border: 1px solid #3498db;
+    border-radius: 5px;
+    background-color: #ffffff;
+}
+
+.stExpander > div > summary {
+    font-family: 'Courier New', monospace;
+    color: #2c3e50;
+    font-size: 16px;
+    padding: 10px;
+}
+
+.stExpander > div > summary:hover {
+    background-color: #ecf0f1;
+}
+
+.plot-container {
+    border: 1px solid #3498db;
+    border-radius: 5px;
+    padding: 10px;
+    background-color: #ffffff;
+    margin-top: 10px;
 }
