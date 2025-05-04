@@ -1,54 +1,103 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.compose import ColumnTransformer
-from data_generator import generate_historical_data, generate_current_year_data
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+import streamlit as st
 
-def load_uploaded_data(uploaded_file):
+def load_uploaded_data(file):
     """Load and validate uploaded CSV data."""
     try:
-        data = pd.read_csv(uploaded_file)
-        required_columns = ["Student_ID", "CA_Status", "Drop_Off"]
-        missing_cols = [col for col in required_columns if col not in data.columns]
-        if missing_cols:
-            raise ValueError(f"Missing required columns: {missing_cols}")
+        data = pd.read_csv(file, dtype_backend="pandas", low_memory=False)
+        if data.empty:
+            raise ValueError("Uploaded CSV is empty.")
+        if "Student_ID" in data.columns:
+            data["Student_ID"] = data["Student_ID"].astype(str)
         return data
     except Exception as e:
         raise ValueError(f"Error loading CSV: {str(e)}")
 
 def compute_high_risk_baselines(data):
-    """Compute baseline statistics for high-risk students."""
-    if data is not None:
-        high_risk = data[data["CA_Status"] == "CA"]
-        if not high_risk.empty:
-            return {
-                "Attendance_Percentage": high_risk["Attendance_Percentage"].mean(),
-                "Academic_Performance": high_risk["Academic_Performance"].mean(),
-                "Suspensions": high_risk["Suspensions"].mean(),
-                "Transportation": high_risk["Transportation"].mode().iloc[0] if not high_risk["Transportation"].empty else "Unknown"
-            }
-    return None
+    """Compute statistical baselines for high-risk identification."""
+    try:
+        numeric_cols = data.select_dtypes(include=[np.number]).columns
+        baselines = {}
+        for col in numeric_cols:
+            if col not in ["Student_ID", "Year"]:
+                baselines[col] = {
+                    "mean": data[col].mean(),
+                    "std": data[col].std()
+                }
+        return baselines
+    except Exception as e:
+        st.warning(f"Error computing high-risk baselines: {str(e)}")
+        return {}
 
-def preprocess_data(X, categorical_cols, numerical_cols):
-    """Preprocess data with scaling and encoding."""
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ("num", StandardScaler(), numerical_cols),
-            ("cat", OneHotEncoder(drop="first", sparse_output=False, handle_unknown="ignore"), categorical_cols)
-        ])
-    X_processed = preprocessor.fit_transform(X)
-    feature_names = numerical_cols + list(preprocessor.named_transformers_["cat"].get_feature_names_out(categorical_cols))
-    return X_processed, preprocessor, feature_names
+def preprocess_data(data, features, targets):
+    """Preprocess data for training or prediction."""
+    try:
+        # Ensure data is a DataFrame
+        data = pd.DataFrame(data)
+        
+        # Handle missing values
+        data = data.fillna(data.select_dtypes(include=[np.number]).mean())
+        data = data.fillna(data.select_dtypes(exclude=[np.number]).mode().iloc[0])
+        
+        # Initialize X and y
+        X = data[features].copy() if features else pd.DataFrame()
+        y = pd.DataFrame()
+        
+        # Encode categorical features
+        for col in X.columns:
+            if X[col].dtype == "object" or X[col].dtype.name == "category":
+                try:
+                    le = LabelEncoder()
+                    X[col] = le.fit_transform(X[col].astype(str))
+                except Exception as e:
+                    st.warning(f"Error encoding feature {col}: {str(e)}")
+                    X[col] = 0
+        
+        # Scale numerical features
+        scaler = StandardScaler()
+        numeric_cols = X.select_dtypes(include=[np.number]).columns
+        if len(numeric_cols) > 0:
+            try:
+                X[numeric_cols] = scaler.fit_transform(X[numeric_cols])
+            except Exception as e:
+                st.warning(f"Error scaling numerical features: {str(e)}")
+        
+        # Process targets
+        if targets:
+            y = data[targets].copy()
+            for col in y.columns:
+                if y[col].dtype == "object" or y[col].dtype.name == "category" or y[col].dtype == "bool":
+                    try:
+                        if y[col].isna().any():
+                            raise ValueError(f"Target column {col} contains missing values.")
+                        unique_values = y[col].dropna().unique()
+                        if len(unique_values) < 2:
+                            raise ValueError(f"Target column {col} has fewer than 2 unique values.")
+                        le = LabelEncoder()
+                        y[col] = le.fit_transform(y[col].astype(str))
+                    except Exception as e:
+                        st.warning(f"Error encoding target {col}: {str(e)}")
+                        y[col] = 0
+                else:
+                    # Ensure target is binary or categorical
+                    unique_values = y[col].dropna().unique()
+                    if len(unique_values) > 2:
+                        st.warning(f"Target column {col} has more than 2 unique values, treating as numeric may cause errors.")
+        
+        return X, y
+    except Exception as e:
+        raise ValueError(f"Error preprocessing data: {str(e)}")
 
 def combine_datasets(datasets):
-    """Combine multiple datasets, ensuring column consistency and target presence."""
-    if not datasets:
-        raise ValueError("No datasets provided.")
-    for data in datasets:
-        required_columns = ["Student_ID", "CA_Status", "Drop_Off"]
-        missing_cols = [col for col in required_columns if col not in data.columns]
-        if missing_cols:
-            raise ValueError(f"Dataset missing required columns: {missing_cols}")
-    combined = pd.concat(datasets, ignore_index=True)
-    return combined
+    """Combine multiple datasets into a single DataFrame."""
+    try:
+        if not datasets:
+            return pd.DataFrame()
+        combined = pd.concat(datasets, ignore_index=True)
+        if "Student_ID" in combined.columns:
+            combined["Student_ID"] = combined["Student_ID"].astype(str)
+        return combined
+    except Exception as e:
+        raise ValueError(f"Error combining datasets: {str(e)}")
