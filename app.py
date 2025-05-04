@@ -129,16 +129,17 @@ if st.session_state.page == "📝 Data Configuration":
     with st.container():
         total_days = 180
         st.write(f"Total School Days: {total_days}")
+        st.info("Ensure Present Days Range and Absent Days Range allow for valid combinations. For example, maximum present days plus minimum absent days should not exceed total days.")
         present_days_range = st.slider("Present Days Range", 0, total_days, (100, total_days))
         absent_days_range = st.slider("Absent Days Range", 0, total_days, (0, 80))
         
         # Enhanced validation for attendance ranges
         attendance_valid = True
         if present_days_range[0] + absent_days_range[1] > total_days:
-            st.error(f"Error: Minimum present days ({present_days_range[0]}) plus maximum absent days ({absent_days_range[1]}) exceeds total days ({total_days}). Adjust ranges.")
+            st.error(f"Error: Minimum present days ({present_days_range[0]}) plus maximum absent days ({absent_days_range[1]}) exceeds total days ({total_days}). Reduce minimum present days or maximum absent days.")
             attendance_valid = False
         elif present_days_range[1] + absent_days_range[0] < total_days:
-            st.error(f"Error: Maximum present days ({present_days_range[1]}) plus minimum absent days ({absent_days_range[0]}) is less than total days ({total_days}). Adjust ranges.")
+            st.error(f"Error: Maximum present days ({present_days_range[1]}) plus minimum absent days ({absent_days_range[0]}) is less than total days ({total_days}). Increase maximum present days or minimum absent days.")
             attendance_valid = False
         elif present_days_range[1] < present_days_range[0] or absent_days_range[1] < absent_days_range[0]:
             st.error("Error: Range maximum must be greater than or equal to minimum.")
@@ -147,7 +148,7 @@ if st.session_state.page == "📝 Data Configuration":
             st.error(f"Error: Maximum possible absent days ({total_days - present_days_range[0]}) is less than minimum absent days ({absent_days_range[0]}). Reduce minimum absent days or lower minimum present days.")
             attendance_valid = False
         elif total_days - present_days_range[1] < absent_days_range[0]:
-            st.error(f"Error: Minimum absent days ({absent_days_range[0]}) cannot be achieved with maximum present days ({present_days_range[1]}). Increase maximum absent days or reduce maximum present days.")
+            st.error(f"Error: Minimum absent days ({absent_days_range[0]}) cannot be achieved with maximum present days ({present_days_range[1]}). Reduce maximum present days or minimum absent days.")
             attendance_valid = False
     
     # Custom Fields
@@ -280,7 +281,7 @@ elif st.session_state.page == "🤖 Model Training":
                 "SVM", "Gradient Boosting", "Neural Network"
             ], default=["Logistic Regression", "Random Forest"])
             
-            enable_tuning = st.checkbox("Enable Hyperparameter Tuning", value=False)
+ genetically enable_tuning = st.checkbox("Enable Hyperparameter Tuning", value=False)
             tuning_params = {}
             if enable_tuning:
                 st.subheader("Customize Hyperparameter Tuning")
@@ -591,22 +592,23 @@ elif st.session_state.page == "📊 Results":
             
             total_days = 180
             st.write(f"Total School Days: {total_days}")
+            st.info("Ensure Present Days Range and Absent Days Range allow for valid combinations. For example, maximum present days plus minimum absent days should not exceed total days.")
             present_days_range = st.slider("Present Days Range", 0, total_days, (100, total_days), key="current_present")
             absent_days_range = st.slider("Absent Days Range", 0, total_days, (0, 80), key="current_absent")
             
             # Enhanced validation for current year data
             current_attendance_valid = True
             if present_days_range[0] + absent_days_range[1] > total_days:
-                st.error(f"Error: Minimum present days ({present_days_range[0]}) plus maximum absent days ({absent_days_range[1]}) exceeds total days ({total_days}). Adjust ranges.")
+                st.error(f"Error: Minimum present days ({present_days_range[0]}) plus maximum absent days ({absent_days_range[1]}) exceeds total days ({total_days}). Reduce minimum present days or maximum absent days.")
                 current_attendance_valid = False
             elif present_days_range[1] + absent_days_range[0] < total_days:
-                st.error(f"Error: Maximum present days ({present_days_range[1]}) plus minimum absent days ({absent_days_range[0]}) is less than total days ({total_days}). Adjust ranges.")
+                st.error(f"Error: Maximum present days ({present_days_range[1]}) plus minimum absent days ({absent_days_range[0]}) is less than total days ({total_days}). Increase maximum present days or minimum absent days.")
                 current_attendance_valid = False
             elif total_days - present_days_range[0] < absent_days_range[0]:
                 st.error(f"Error: Maximum possible absent days ({total_days - present_days_range[0]}) is less than minimum absent days ({absent_days_range[0]}). Reduce minimum absent days or lower minimum present days.")
                 current_attendance_valid = False
             elif total_days - present_days_range[1] < absent_days_range[0]:
-                st.error(f"Error: Minimum absent days ({absent_days_range[0]}) cannot be achieved with maximum present days ({present_days_range[1]}). Increase maximum absent days or reduce maximum present days.")
+                st.error(f"Error: Minimum absent days ({absent_days_range[0]}) cannot be achieved with maximum present days ({present_days_range[1]}). Reduce maximum present days or minimum absent days.")
                 current_attendance_valid = False
             
             use_historical_ids = st.checkbox("Use Historical Student IDs", value=False, disabled=st.session_state.data is None)
@@ -1192,61 +1194,4 @@ elif st.session_state.page == "📚 Documentation":
                     yaxis_title="Attendance Percentage",
                     width=600,
                     height=400,
-                    margin=dict(l=50, r=50, t=50, b=50)
-                )
-                st.plotly_chart(fig, use_container_width=False)
-        
-        with st.expander("Dataset Comparison"):
-            st.subheader("Dataset Comparison Heatmap")
-            with st.expander("About Dataset Comparison Heatmap"):
-                st.markdown("""
-                **About Dataset Comparison Heatmap**
-
-                This heatmap compares a selected metric (e.g., average attendance) across datasets by group (e.g., Grade, School).
-                - **Normalized values (0-1)**: Ensures fair comparison across datasets.
-                - **Blue gradient**: Darker blues indicate higher values.
-                - **Filters**: Select grouping variables and metrics to customize the view.
-                - **Hover**: Shows exact values and dataset details.
-                - Use this to identify trends or differences across historical and current datasets.
-                """)
-            
-            if st.session_state.datasets or st.session_state.current_data is not None:
-                group_vars = ["Grade", "School", "Gender", "Meal_Code", "Transportation"]
-                metric_vars = ["Attendance_Percentage", "Academic_Performance", "Suspensions"]
-                
-                group_var = st.selectbox("Group By", group_vars)
-                metric = st.selectbox("Metric", metric_vars)
-                
-                heatmap_data = []
-                dataset_names = list(st.session_state.datasets.keys())
-                if st.session_state.current_data is not None:
-                    dataset_names.append("Current Data")
-                
-                for ds_name in dataset_names:
-                    ds_data = st.session_state.datasets.get(ds_name, st.session_state.current_data)
-                    if ds_data is not None and group_var in ds_data.columns and metric in ds_data.columns:
-                        group_means = ds_data.groupby(group_var)[metric].mean().reset_index()
-                        group_means["Dataset"] = ds_name
-                        heatmap_data.append(group_means)
-                
-                if heatmap_data:
-                    heatmap_df = pd.concat(heatmap_data, ignore_index=True)
-                    heatmap_pivot = heatmap_df.pivot(index=group_var, columns="Dataset", values=metric)
-                    # Normalize data for consistency
-                    heatmap_pivot = (heatmap_pivot - heatmap_pivot.min().min()) / (heatmap_pivot.max().max() - heatmap_pivot.min().min())
-                    heatmap_pivot = heatmap_pivot.fillna(0)
-                    
-                    fig = px.imshow(
-                        heatmap_pivot,
-                        title=f"{metric} by {group_var} Across Datasets",
-                        labels={"color": f"Normalized {metric}"},
-                        color_continuous_scale="Blues",
-                        hover_data={"value": True}
-                    )
-                    fig.update_traces(hovertemplate=f"{group_var}: %{{y}}<br>Dataset: %{{x}}<br>{metric}: %{{z:.2f}}")
-                    fig.update_layout(width=600, height=400, margin=dict(l=50, r=50, t=50, b=50))
-                    st.plotly_chart(fig, use_container_width=False)
-                else:
-                    st.warning("No data available for the selected group or metric.")
-            else:
-                st.info("Generate or upload data to enable dataset comparison.")
+                    margin=dict(l=50, r=50, t=50, b=50
