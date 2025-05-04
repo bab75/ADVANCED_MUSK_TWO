@@ -1002,4 +1002,198 @@ elif st.session_state.page == "📚 Documentation":
         st.header("Patterns & Correlations Visualizer Dashboard")
         high_risk = st.session_state.data[st.session_state.data["CA_Status"] == "CA"]
         if not high_risk.empty:
-            st.subheader("Discovered
+            st.subheader("Discovered Patterns")
+            if st.session_state.patterns:
+                with st.expander("View Discovered Patterns", expanded=False):
+                    for i, pattern in enumerate(st.session_state.patterns):
+                        col1, col2, col3 = st.columns([4, 1, 1])
+                        with col1:
+                            st.write(f"- {pattern['pattern']}: {pattern['explanation']}")
+                        with col2:
+                            if st.button("Edit", key=f"edit_pattern_{i}"):
+                                st.session_state.edit_pattern_index = i
+                        with col3:
+                            if st.button("Delete", key=f"delete_pattern_{i}"):
+                                st.session_state.patterns.pop(i)
+                                st.experimental_rerun()
+                
+                if 'edit_pattern_index' in st.session_state:
+                    st.subheader("Edit Pattern")
+                    idx = st.session_state.edit_pattern_index
+                    new_pattern = st.text_input("Pattern", value=st.session_state.patterns[idx]["pattern"])
+                    new_explanation = st.text_area("Explanation", value=st.session_state.patterns[idx]["explanation"])
+                    if st.button("Save Changes"):
+                        st.session_state.patterns[idx] = {"pattern": new_pattern, "explanation": new_explanation}
+                        del st.session_state.edit_pattern_index
+                        st.experimental_rerun()
+            
+            st.subheader("Add New Pattern")
+            new_pattern = st.text_input("New Pattern")
+            new_explanation = st.text_area("Pattern Explanation")
+            if st.button("Add Pattern"):
+                if new_pattern and new_explanation:
+                    st.session_state.patterns.append({"pattern": new_pattern, "explanation": new_explanation})
+                    st.success("Pattern added successfully!")
+                    st.experimental_rerun()
+            
+            st.subheader("Correlation Visualizations")
+            numeric_cols = st.session_state.data.select_dtypes(include=[np.number]).columns
+            corr = st.session_state.data[numeric_cols].corr()
+            fig = px.imshow(corr, title="Correlation Heatmap of Features", labels={"color": "Correlation"})
+            st.plotly_chart(fig)
+            
+            st.write("**Correlation with Attendance**")
+            corr_attendance = corr["Attendance_Percentage"].drop("Attendance_Percentage")
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                x=corr_attendance.index,
+                y=corr_attendance.values,
+                marker_color=np.where(corr_attendance > 0, "#3498db", "#e74c3c")
+            ))
+            fig.update_layout(
+                title="Correlation of Attendance with Other Factors",
+                xaxis_title="Feature",
+                yaxis_title="Correlation Coefficient"
+            )
+            st.plotly_chart(fig)
+            
+            st.write("**Attendance vs. Suspensions**")
+            fig = px.scatter(st.session_state.data, x="Suspensions", y="Attendance_Percentage", 
+                           color="CA_Status", title="Attendance vs. Suspensions")
+            st.plotly_chart(fig)
+        
+        st.header("AI-Powered Pattern Recognition")
+        if st.session_state.models:
+            displayed = False
+            for model_name in ["Random Forest", "Decision Tree", "Gradient Boosting"]:
+                if model_name in st.session_state.models:
+                    model_info = st.session_state.models[model_name]
+                    fig = plot_feature_importance(model_info["model"], model_info["feature_names"])
+                    if fig:
+                        st.write(f"Key factors influencing absenteeism (based on {model_name} feature importance):")
+                        st.plotly_chart(fig)
+                        displayed = True
+                        break
+            if not displayed:
+                st.write("No feature importance available. Train a Random Forest, Decision Tree, or Gradient Boosting model.")
+        else:
+            st.info("Train models to enable AI-powered pattern recognition.")
+        
+        st.header("Group Analysis & Comparisons")
+        st.write("""
+        **Purpose of Analysis**: Use the dropdown to visualize Drop Off % for each value of a selected feature (e.g., Grade, Gender, or custom fields like Extracurricular) in the current-year data. Optional filters allow you to subset historical data for deeper analysis of attendance trends.
+        """)
+        
+        # Dropdown for selecting field to visualize Drop Off %
+        if st.session_state.current_data is not None and "CA_Prediction" in st.session_state.current_data.columns:
+            group_by_options = [col for col in st.session_state.current_data.columns if st.session_state.current_data[col].dtype == "object" or col == "Grade"]
+            group_by_options += [f["name"] for f in st.session_state.current_custom_fields if f["name"] in st.session_state.current_data.columns]
+            group_by_field = st.selectbox("Visualize Drop Off % By", group_by_options, key="group_analysis_field")
+            
+            if group_by_field:
+                dropoff_data = st.session_state.current_data.groupby(group_by_field)["CA_Prediction"].value_counts(normalize=True).unstack().fillna(0)
+                if "CA" in dropoff_data.columns:
+                    dropoff_data["Drop_Off_Percent"] = dropoff_data["CA"] * 100
+                    dropoff_data = dropoff_data[["Drop_Off_Percent"]].reset_index()
+                    fig = px.bar(
+                        dropoff_data,
+                        x=group_by_field,
+                        y="Drop_Off_Percent",
+                        title=f"Drop Off Percentage by {group_by_field}",
+                        labels={"Drop_Off_Percent": "Drop Off Percentage (%)"},
+                        color="Drop_Off_Percent",
+                        color_continuous_scale="Reds"
+                    )
+                    fig.update_traces(hovertemplate=f"{group_by_field}: %{{x}}<br>Drop Off %: %{{y:.2f}}%")
+                    st.plotly_chart(fig)
+                else:
+                    st.warning(f"No students predicted as CA for grouping by {group_by_field}.")
+        
+        # Optional filters for historical data
+        with st.expander("Advanced Filters for Historical Data", expanded=False):
+            st.write("Filter historical data to analyze specific student cohorts:")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                filter_grade = st.multiselect("Filter by Grade", sorted(st.session_state.data["Grade"].unique()), key="filter_grade")
+                filter_gender = st.multiselect("Filter by Gender", st.session_state.data["Gender"].unique(), key="filter_gender")
+            with col2:
+                filter_school = st.multiselect("Filter by School", st.session_state.data["School"].unique(), key="filter_school")
+                filter_meal = st.multiselect("Filter by Meal Code", st.session_state.data["Meal_Code"].unique(), key="filter_meal")
+            with col3:
+                filter_transport = st.multiselect("Filter by Transportation", st.session_state.data["Transportation"].unique(), key="filter_transport")
+            
+            filtered_data = st.session_state.data
+            if filter_grade:
+                filtered_data = filtered_data[filtered_data["Grade"].isin(filter_grade)]
+            if filter_gender:
+                filtered_data = filtered_data[filtered_data["Gender"].isin(filter_gender)]
+            if filter_school:
+                filtered_data = filtered_data[filtered_data["School"].isin(filter_school)]
+            if filter_meal:
+                filtered_data = filtered_data[filtered_data["Meal_Code"].isin(filter_meal)]
+            if filter_transport:
+                filtered_data = filtered_data[filtered_data["Transportation"].isin(filter_transport)]
+            
+            st.write("**Attendance Trends by Group**")
+            if not filtered_data.empty:
+                group_by = st.selectbox("Group By", ["Grade", "Gender", "School", "Meal_Code", "Transportation"], key="historical_group_by")
+                trend_data = filtered_data.groupby(group_by)["Attendance_Percentage"].mean().reset_index()
+                fig = px.bar(trend_data, x=group_by, y="Attendance_Percentage", title=f"Average Attendance by {group_by}")
+                st.plotly_chart(fig)
+                
+                fig = px.box(filtered_data, x=group_by, y="Attendance_Percentage", title=f"Attendance Distribution by {group_by}")
+                st.plotly_chart(fig)
+        
+        st.subheader("Advanced Attendance Visualizations")
+        if not high_risk.empty:
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                if st.session_state.current_data is not None:
+                    hist_trend = high_risk.groupby("Grade")["Attendance_Percentage"].mean().reset_index()
+                    hist_trend["Dataset"] = "Historical"
+                    curr_trend = st.session_state.current_data.groupby("Grade")["Attendance_Percentage"].mean().reset_index()
+                    curr_trend["Dataset"] = "Current Year"
+                    combined_trend = pd.concat([hist_trend, curr_trend], ignore_index=True)
+                    
+                    plt.figure(figsize=(10, 6))
+                    sns.barplot(data=combined_trend, x="Grade", y="Attendance_Percentage", hue="Dataset", palette="Blues")
+                    plt.title("Average Attendance by Grade: Historical vs. Current Year")
+                    plt.xlabel("Grade")
+                    plt.ylabel("Average Attendance (%)")
+                    plt.legend(title="Dataset")
+                    bar_plot_path = os.path.join(tmpdirname, "attendance_bar.png")
+                    plt.savefig(bar_plot_path, bbox_inches="tight")
+                    plt.close()
+                    st.image(bar_plot_path, caption="Grouped Bar Plot of Average Attendance by Grade")
+                
+                plt.figure(figsize=(10, 6))
+                sns.violinplot(data=high_risk, x="Grade", y="Attendance_Percentage", palette="Blues")
+                plt.title("Attendance Distribution by Grade (Historical Data)")
+                plt.xlabel("Grade")
+                plt.ylabel("Attendance Percentage (%)")
+                violin_plot_path = os.path.join(tmpdirname, "attendance_violin.png")
+                plt.savefig(violin_plot_path, bbox_inches="tight")
+                plt.close()
+                st.image(violin_plot_path, caption="Violin Plot of Attendance Distribution by Grade")
+        
+        st.header("Intervention Recommendations")
+        if not high_risk.empty:
+            with st.expander("Why Historical Data?", expanded=False):
+                st.markdown("""
+                **Why Historical Data?**
+
+                Historical data for high-risk students (CA Status = CA) helps identify patterns and risk factors. Key features like attendance, academic performance, suspensions, and transportation reveal characteristics:
+                - Low attendance indicates chronic absence.
+                - Poor academic performance may show disengagement.
+                - Suspensions suggest behavioral challenges.
+                - Transportation issues may limit access.
+
+                These insights inform targeted interventions like tutoring, counseling, or transportation support.
+                """)
+            
+            st.write("High-risk students (CA Status = CA):")
+            st.dataframe(high_risk[["Student_ID", "Attendance_Percentage", "Academic_Performance", "Suspensions", "Transportation"]])
+            st.write("Recommended Actions:")
+            st.write("- **Tutoring Programs**: For low academic performance.")
+            st.write("- **Counseling Services**: For high absence rates or suspensions.")
+            st.write("- **Parental Engagement**: Contact families of high-risk students.")
+            st.write("- **Transportation Support**: Assist students with unreliable transportation.")
