@@ -219,7 +219,7 @@ elif st.session_state.page == "🤖 Model Training":
     st.markdown("""
     <h1>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 30px; height: 30px; vertical-align: middle; margin-right: 10px;">
-            <path d="M12 2a10 10 0 00-8 4v2h2v2H4v2h2v2H4v2h2v2h2a10 10 0 008-4 10 10 0 008 4h2v-2h-2v-2h2v-2h-2v-2h2V8h-2V6a10 10 0 00-8-4zm0 2a8 8 0 016.32 3H17v2h-2v2h2v2h-2v2h2v2h-1.32A8 8 0 0112 20a8 8 0 01-6.32-3H7v-2H5v-2h2v-2H5V9h2V7h1.32A8 8 0 0112 4z"/>
+            <path d="M12 2a10 10 0 00-8 4v2h2v2H4v2h2v2H4v2h2v2h2a10 10 0 008-4 10 10 0 008 4h2v-2h-2v-2h2v-2h-2v-2h2V8h-2V6a10 10 0 00-8-4zm0 2a8 8 0 016.32 3H17v2h- personally v2h2v2h-2v2h2v2h-1.32A8 8 0 0112 20a8 8 0 01-6.32-3H7v-2H5v-2h2v-2H5V9h2V7h1.32A8 8 0 0112 4z"/>
         </svg>
         🤖 Model Training
     </h1>
@@ -261,15 +261,17 @@ elif st.session_state.page == "🤖 Model Training":
             features = [f for f, enabled in feature_toggles.items() if enabled]
             
             st.subheader("Target Selection")
-            # Identify potential target columns (categorical or binary)
+            # Identify potential target columns (categorical or binary with valid values)
             potential_targets = []
             for col in combined_data.columns:
                 if col in ["Student_ID", "Attendance_Percentage", "Academic_Performance", "Present_Days", "Absent_Days", "Suspensions"]:
                     continue
                 if combined_data[col].dtype in ["object", "category"] or len(combined_data[col].unique()) <= 2:
-                    potential_targets.append(col)
+                    # Ensure column has no missing values and at least two non-null values
+                    if not combined_data[col].isna().any() and len(combined_data[col].dropna().unique()) >= 2:
+                        potential_targets.append(col)
             if not potential_targets:
-                st.error("No suitable target columns found in the selected datasets.")
+                st.error("No suitable target columns found in the selected datasets. Ensure targets are categorical or binary with no missing values.")
             else:
                 targets = st.multiselect("Select Targets", potential_targets, default=["CA_Status"] if "CA_Status" in potential_targets else potential_targets[:1])
                 if not targets:
@@ -533,7 +535,7 @@ elif st.session_state.page == "📊 Results":
                 dataset_id = str(uuid.uuid4())
                 st.session_state.datasets[dataset_id] = data
                 st.session_state.current_data = data
-                st.success(f"Data uploaded successfully! Dataset ID: {dataset_id}")
+                st.success(f"Data uploaded successfully! ID: {dataset_id}")
                 st.subheader("Data Preview")
                 st.dataframe(st.session_state.current_data.head(10))
             except Exception as e:
