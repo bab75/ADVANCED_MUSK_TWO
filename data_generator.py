@@ -14,6 +14,12 @@ def generate_historical_data(
     schools = [f"{school_prefix}{i:03d}" for i in range(1, num_schools + 1)]
     genders = ["Male", "Female", "Other"]
     
+    # Validate attendance parameters
+    if present_days_range[0] + absent_days_range[1] > total_days:
+        raise ValueError("Present days and absent days ranges exceed total days.")
+    if present_days_range[0] >= total_days:
+        raise ValueError("Minimum present days cannot equal or exceed total days.")
+    
     for year in range(year_start, year_end + 1):
         for _ in range(num_students):
             student_id = str(uuid.uuid4())[:id_length]
@@ -25,7 +31,15 @@ def generate_historical_data(
             transport = np.random.choice(transportation)
             suspensions = np.random.randint(suspensions_range[0], suspensions_range[1] + 1)
             present_days = np.random.randint(present_days_range[0], present_days_range[1] + 1)
-            absent_days = np.random.randint(absent_days_range[0], min(absent_days_range[1] + 1, total_days - present_days))
+            
+            # Ensure valid absent days
+            max_possible_absent = total_days - present_days
+            if max_possible_absent <= 0:
+                raise ValueError(f"Present days ({present_days}) exceeds total days ({total_days}).")
+            absent_upper_bound = min(absent_days_range[1] + 1, max_possible_absent + 1)
+            if absent_upper_bound <= absent_days_range[0]:
+                absent_upper_bound = absent_days_range[0] + 1
+            absent_days = np.random.randint(absent_days_range[0], absent_upper_bound)
             attendance_percentage = (present_days / total_days) * 100
             
             # Assign CA_Status based on attendance and dropoff_percent
@@ -90,6 +104,12 @@ def generate_current_year_data(
     schools = [f"{school_prefix}{i:03d}" for i in range(1, num_schools + 1)]
     genders = ["Male", "Female", "Other"]
     
+    # Validate attendance parameters
+    if present_days_range[0] + absent_days_range[1] > total_days:
+        raise ValueError("Present days and absent days ranges exceed total days.")
+    if present_days_range[0] >= total_days:
+        raise ValueError("Minimum present days cannot equal or exceed total days.")
+    
     if historical_ids is not None and include_graduates:
         historical_students = historical_ids[["Student_ID", "Grade"]].drop_duplicates()
         historical_students["Grade"] = historical_students["Grade"].apply(lambda g: min(g + 1, 12))
@@ -107,7 +127,15 @@ def generate_current_year_data(
         transport = np.random.choice(transportation)
         suspensions = np.random.randint(suspensions_range[0], suspensions_range[1] + 1)
         present_days = np.random.randint(present_days_range[0], present_days_range[1] + 1)
-        absent_days = np.random.randint(absent_days_range[0], min(absent_days_range[1] + 1, total_days - present_days))
+        
+        # Ensure valid absent days
+        max_possible_absent = total_days - present_days
+        if max_possible_absent <= 0:
+            raise ValueError(f"Present days ({present_days}) exceeds total days ({total_days}).")
+        absent_upper_bound = min(absent_days_range[1] + 1, max_possible_absent + 1)
+        if absent_upper_bound <= absent_days_range[0]:
+            absent_upper_bound = absent_days_range[0] + 1
+        absent_days = np.random.randint(absent_days_range[0], absent_upper_bound)
         attendance_percentage = (present_days / total_days) * 100
         
         # Assign CA_Status based on attendance and dropoff_percent
