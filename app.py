@@ -404,7 +404,7 @@ elif st.session_state.page == "🤖 Model Training":
                     with col1:
                         st.markdown(f"""
                         <div class="model-icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>
                             {model_name}
                         </div>
                         """, unsafe_allow_html=True)
@@ -647,15 +647,19 @@ elif st.session_state.page == "📊 Results":
                 predictions = model_info["model"].predict(X_processed)
                 probabilities = model_info["model"].predict_proba(X_processed)[:, 1]
                 
-                st.session_state.current_data["CA_Prediction"] = predictions
-                st.session_state.current_data["CA_Probability"] = probabilities
+                # Store predictions in a new dataframe to avoid modifying original data
+                prediction_data = st.session_state.current_data.copy()
+                prediction_data["CA_Prediction"] = predictions
+                prediction_data["CA_Probability"] = probabilities
                 
-                # Merge historical data only if historical IDs were used
-                if "Student_ID" in st.session_state.current_data.columns and st.session_state.data is not None and use_historical_ids:
+                # Merge historical data only if historical IDs were used and Student_ID exists
+                if use_historical_ids and "Student_ID" in prediction_data.columns and st.session_state.data is not None:
                     historical_data = st.session_state.data[["Student_ID", "Attendance_Percentage", "Academic_Performance", "Suspensions"]]
-                    st.session_state.current_data = st.session_state.current_data.merge(
+                    prediction_data = prediction_data.merge(
                         historical_data, on="Student_ID", how="left", suffixes=("", "_Historical")
                     )
+                
+                st.session_state.current_data = prediction_data
                 
                 st.subheader("Prediction Results")
                 st.dataframe(st.session_state.current_data)
@@ -665,8 +669,7 @@ elif st.session_state.page == "📊 Results":
                     heatmap_data,
                     title="CA Probability Heatmap by Grade and School (High Risk in Red)",
                     labels={"color": "CA Probability"},
-                    color_continuous_scale="Reds",
-                    hover_data={"value": True}
+                    color_continuous_scale="Reds"
                 )
                 fig.update_traces(hovertemplate="Grade: %{y}<br>School: %{x}<br>CA Probability: %{z:.2f}")
                 st.plotly_chart(fig)
@@ -685,7 +688,7 @@ elif st.session_state.page == "📊 Results":
                 fig = px.imshow(
                     heatmap_data,
                     title="CA Prediction Heatmap by Grade",
-                    hover_data={"value": True}
+                    labels={"color": "Count"}
                 )
                 fig.update_traces(hovertemplate="Grade: %{y}<br>Prediction: %{x}<br>Count: %{z}")
                 st.plotly_chart(fig)
