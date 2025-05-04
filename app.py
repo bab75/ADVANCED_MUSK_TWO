@@ -326,6 +326,10 @@ elif st.session_state.page == "🤖 Model Training":
         feature_toggles = {f: st.checkbox(f, value=True, key=f"feature_{f}") for f in available_features}
         features = [f for f, enabled in feature_toggles.items() if enabled]
         
+        if not features:
+            st.error("Please select at least one feature.")
+            st.stop()
+        
         categorical_cols = [col for col in features if data[col].dtype == "object"]
         numerical_cols = [col for col in features if col not in categorical_cols]
         
@@ -352,12 +356,12 @@ elif st.session_state.page == "🤖 Model Training":
             Select multiple models to compare their performance. Use hyperparameter tuning for optimized results.
             For a deeper dive, read [this guide on machine learning models](https://towardsdatascience.com/the-7-most-common-machine-learning-models-8e8d6c0e1c5c).
             """)
+        
         model_options = ["Logistic Regression", "Random Forest", "Decision Tree", "SVM", "Gradient Boosting", "Neural Network"]
         models_to_train = st.multiselect("Select Models", model_options, default=["Random Forest"])
         
         recommended_model = "Random Forest" if len(targets) > 1 else "Logistic Regression"
         st.info(f"Recommended Model: {recommended_model} (based on {'multi-target' if len(targets) > 1 else 'single-target'} learning)")
-        model_available = recommended_model in st.session_state.models
         
         enable_tuning = st.checkbox("Enable Hyperparameter Tuning", value=False)
         tuning_params = {}
@@ -367,18 +371,20 @@ elif st.session_state.page == "🤖 Model Training":
                 st.write(f"**{model_name} Parameters**")
                 if model_name == "Random Forest":
                     tuning_params[model_name] = {
-                        "n_estimators": st.multiselect(f"N Estimators ({model_name})", [100, 200], default=[100, 200]),
-                        "max_depth": st.multiselect(f"Max Depth ({model_name})", [None, 10, 20], default=[None, 10, 20])
+                        "estimator__n_estimators": st.multiselect(f"N Estimators ({model_name})", [100, 200], default=[100, 200]),
+                        "estimator__max_depth": st.multiselect(f"Max Depth ({model_name})", [None, 10, 20], default=[None, 10, 20])
                     }
                 # Add other models as needed
         
-        if st.button("Train Models", disabled=not targets):
+        if st.button("Train Models", disabled=not targets or not features):
             try:
                 with st.spinner("Training models..."):
                     X = data[features]
                     y = data[targets]
                     if y.empty or y.isnull().all().all():
                         raise ValueError("Target variable(s) contain no valid data.")
+                    if X.empty:
+                        raise ValueError("No features selected or feature data is empty.")
                     
                     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
                     
@@ -388,30 +394,31 @@ elif st.session_state.page == "🤖 Model Training":
                             ("cat", OneHotEncoder(drop="first", sparse_output=False, handle_unknown="ignore"), categorical_cols)
                         ])
                     
-                    st.session_state.preprocessor = preprocessor
-                    X_train_processed = preprocessor.fit_transform(X_train)
-                    X_test_processed = preprocessor.transform(X_test)
-                    
-                    feature_names = numerical_cols + list(preprocessor.named_transformers_["cat"].get_feature_names_out(categorical_cols))
-                    
                     st.session_state.models = {}
                     for model_name in models_to_train:
                         status = st.empty()
                         status.write(f"Training {model_name}...")
                         if enable_tuning and model_name in tuning_params:
-                            model, metrics = tune_model(model_name, X_train_processed, y_train, X_test_processed, y_test, tuning_params[model_name])
+                            model, metrics = tune_model(model_name, X_train, y_train, X_test, y_test, tuning_params[model_name], preprocessor)
                         else:
-                            model, metrics = train_model(model_name, X_train_processed, y_train, X_test_processed, y_test)
+                            model, metrics = train_model(model_name, X_train, y_train, X_test, y_test, preprocessor)
                         
                         version_id = str(uuid.uuid4())
+                        feature_names = numerical_cols + (list(preprocessor.named_transformers_["cat"].get_feature_names_out(categorical_cols)) if categorical_cols else [])
                         st.session_state.model_versions.setdefault(model_name, []).append({
                             "version_id": version_id,
                             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             "metrics": metrics,
                             "model": model,
-                            "feature_names": feature_names
+                            "feature_names": feature_names,
+                            "features": features
                         })
-                        st.session_state.models[model_name] = {"model": model, "metrics": metrics, "feature_names": feature_names}
+                        st.session_state.models[model_name] = {
+                            "model": model,
+                            "metrics": metrics,
+                            "feature_names": feature_names,
+                            "features": features
+                        }
                         status.success(f"{model_name} trained successfully!")
                     
                     st.session_state.patterns[selected_dataset] = generate_patterns(data, selected_dataset)
@@ -604,10 +611,14 @@ elif st.session_state.page == "📊 Results":
     if st.session_state.current_data is not None and st.session_state.models:
         st.subheader("Run Predictions")
         selected_model = st.selectbox("Select Model", list(st.session_state.models.keys()))
-        excluded_columns = ["Student_ID", "CA_Prediction", "CA_Probability", "Drop_Off", "Prediction_Causes"]
-        available_features = [col for col in st.session_state.current_data.columns if col not in excluded_columns]
-        feature_toggles = {f: st.checkbox(f, value=True, key=f"predict_feature_{f}") for f in available_features}
+        model_info = st.session_state.models[selected_model]
+        expected_features = model_info["features"]
+        available_features = [col for col in st.session_state.current_data.columns if col not in ["Student_ID", "CA_Prediction", "CA_Probability", "Drop_Off", "Prediction_Causes"]]
+        feature_toggles = {f: st.checkbox(f, value=f in expected_features, key=f"predict_feature_{f}") for f in available_features}
         features = [f for f, enabled in feature_toggles.items() if enabled]
+        
+        if set(features) != set(expected_features):
+            st.warning(f"Selected features {features} do not match training features {expected_features}. This may cause errors.")
         
         group_by_options = [col for col in available_features if st.session_state.current_data[col].dtype == "object" or col == "Grade"]
         group_by_feature = st.selectbox(
@@ -618,11 +629,12 @@ elif st.session_state.page == "📊 Results":
         
         if st.button("Predict"):
             try:
-                model_info = st.session_state.models[selected_model]
                 X = st.session_state.current_data[features]
-                X_processed = model_info["model"].named_steps["preprocessor"].transform(X)
-                predictions = model_info["model"].named_steps["estimator"].predict(X_processed)
-                probabilities = model_info["model"].named_steps["estimator"].predict_proba(X_processed)
+                if X.empty:
+                    raise ValueError("No features selected for prediction.")
+                
+                predictions = model_info["model"].predict(X)
+                probabilities = model_info["model"].predict_proba(X)
                 
                 prediction_data = st.session_state.current_data.copy()
                 target_names = list(model_info["metrics"].keys())
@@ -834,6 +846,7 @@ elif st.session_state.page == "📊 Results":
                 )
                 fig.update_traces(hovertemplate="Grade: %{y}<br>School: %{x}<br>Dataset: %{zaxis}<br>CA Probability: %{z:.2f}")
                 st.plotly_chart(fig)
+    
         
         st.subheader("Single Student Analysis")
         if "CA_Prediction" in st.session_state.current_data.columns:
