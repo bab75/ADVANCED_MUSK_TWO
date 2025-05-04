@@ -36,49 +36,61 @@ if 'current_custom_fields' not in st.session_state:
 if 'selected_student_id' not in st.session_state:
     st.session_state.selected_student_id = None
 if 'model_versions' not in st.session_state:
-    st.session_state.model_versions = {}  # Store model versions
+    st.session_state.model_versions = {}
 if 'patterns' not in st.session_state:
-    st.session_state.patterns = []  # Store user-defined patterns
+    st.session_state.patterns = []
+if 'page' not in st.session_state:
+    st.session_state.page = "Data Configuration"
 
-# Sidebar navigation with emoji-based SVG icons
+# Sidebar navigation with action buttons
 st.sidebar.title("Navigation")
-st.sidebar.markdown("""
+if st.sidebar.button("""
 <div class="nav-icon">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db">
         <path d="M3 3h18v18H3V3zm2 2v14h14V5H5zm2 2h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/>
     </svg>
     📝 Data Configuration
 </div>
-""", unsafe_allow_html=True)
-st.sidebar.markdown("""
+""", key="nav_data"):
+    st.session_state.page = "Data Configuration"
+if st.sidebar.button("""
 <div class="nav-icon">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db">
         <path d="M12 2a10 10 0 00-8 4v2h2v2H4v2h2v2H4v2h2v2h2a10 10 0 008-4 10 10 0 008 4h2v-2h-2v-2h2v-2h-2v-2h2V8h-2V6a10 10 0 00-8-4zm0 2a8 8 0 016.32 3H17v2h-2v2h2v2h-2v2h2v2h-1.32A8 8 0 0112 20a8 8 0 01-6.32-3H7v-2H5v-2h2v-2H5V9h2V7h1.32A8 8 0 0112 4z"/>
     </svg>
     🤖 Model Training
 </div>
-""", unsafe_allow_html=True)
-st.sidebar.markdown("""
+""", key="nav_model"):
+    st.session_state.page = "Model Training"
+if st.sidebar.button("""
 <div class="nav-icon">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db">
         <path d="M3 3h18v18H3V3zm2 2v14h14V5H5zm2 2h2v6H7V7zm4 0h2v10h-2V7zm4 0h2v4h-2V7z"/>
     </svg>
     📊 Results
 </div>
-""", unsafe_allow_html=True)
-st.sidebar.markdown("""
+""", key="nav_results"):
+    st.session_state.page = "Results"
+if st.sidebar.button("""
 <div class="nav-icon">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db">
         <path d="M4 3h16a2 2 0 012 2v14a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2zm1 2v14h14V5H5zm2 2h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/>
     </svg>
     📚 Documentation
 </div>
-""", unsafe_allow_html=True)
-page = st.sidebar.radio("Go to", ["Data Configuration", "Model Training", "Results", "Documentation"], label_visibility="collapsed")
+""", key="nav_docs"):
+    st.session_state.page = "Documentation"
 
 # Page 1: Data Configuration
-if page == "Data Configuration":
-    st.title("Data Configuration")
+if st.session_state.page == "Data Configuration":
+    st.markdown("""
+    <h1>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 30px; height: 30px; vertical-align: middle; margin-right: 10px;">
+            <path d="M3 3h18v18H3V3zm2 2v14h14V5H5zm2 2h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/>
+        </svg>
+        📝 Data Configuration
+    </h1>
+    """, unsafe_allow_html=True)
     
     # Historical Data Generation
     st.header("Generate Historical Data")
@@ -164,8 +176,15 @@ if page == "Data Configuration":
             st.error(f"Error generating data: {str(e)}")
 
 # Page 2: Model Training
-elif page == "Model Training":
-    st.title("Model Training")
+elif st.session_state.page == "Model Training":
+    st.markdown("""
+    <h1>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 30px; height: 30px; vertical-align: middle; margin-right: 10px;">
+            <path d="M12 2a10 10 0 00-8 4v2h2v2H4v2h2v2H4v2h2v2h2a10 10 0 008-4 10 10 0 008 4h2v-2h-2v-2h2v-2h-2v-2h2V8h-2V6a10 10 0 00-8-4zm0 2a8 8 0 016.32 3H17v2h-2v2h2v2h-2v2h2v2h-1.32A8 8 0 0112 20a8 8 0 01-6.32-3H7v-2H5v-2h2v-2H5V9h2V7h1.32A8 8 0 0112 4z"/>
+        </svg>
+        🤖 Model Training
+    </h1>
+    """, unsafe_allow_html=True)
     
     # Data Upload or Use Generated
     st.header("Load Data")
@@ -182,7 +201,11 @@ elif page == "Model Training":
     
     if st.session_state.data is not None:
         st.subheader("Feature Selection")
-        available_features = [col for col in st.session_state.data.columns if col not in ["Student_ID", "CA_Status"]]
+        include_student_id = st.checkbox("Include Historical Student ID", value=True)
+        excluded_features = ["CA_Status"]
+        if not include_student_id:
+            excluded_features.append("Student_ID")
+        available_features = [col for col in st.session_state.data.columns if col not in excluded_features]
         feature_toggles = {}
         st.write("Toggle Features:")
         for feature in available_features:
@@ -423,8 +446,15 @@ elif page == "Model Training":
                     st.write(f"- {pattern['pattern']}: {pattern['explanation']}")
 
 # Page 3: Results
-elif page == "Results":
-    st.title("Chronic Absenteeism Results")
+elif st.session_state.page == "Results":
+    st.markdown("""
+    <h1>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 30px; height: 30px; vertical-align: middle; margin-right: 10px;">
+            <path d="M3 3h18v18H3V3zm2 2v14h14V5H5zm2 2h2v6H7V7zm4 0h2v10h-2V7zm4 0h2v4h-2V7z"/>
+        </svg>
+        📊 Results
+    </h1>
+    """, unsafe_allow_html=True)
     
     # Current Year Data
     st.header("Generate Current Year Data")
@@ -531,7 +561,7 @@ elif page == "Results":
                 
                 # Results
                 st.session_state.current_data["CA_Prediction"] = predictions
-                st.session_state.current_data["CA_Probability"] = probabilities
+                st.session_state.current_data["/error training Random Forest: cannot access local variable 'model' where it is not associated with a valueCA_Probability"] = probabilities
                 
                 st.subheader("Prediction Results")
                 st.dataframe(st.session_state.current_data)
@@ -616,8 +646,15 @@ elif page == "Results":
                 st.error(f"Error running predictions: {str(e)}")
 
 # Page 4: Documentation
-elif page == "Documentation":
-    st.title("Documentation")
+elif st.session_state.page == "Documentation":
+    st.markdown("""
+    <h1>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 30px; height: 30px; vertical-align: middle; margin-right: 10px;">
+            <path d="M4 3h16a2 2 0 012 2v14a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2zm1 2v14h14V5H5zm2 2h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/>
+        </svg>
+        📚 Documentation
+    </h1>
+    """, unsafe_allow_html=True)
     
     if st.session_state.data is not None:
         st.header("Patterns & Correlations Visualizer Dashboard")
