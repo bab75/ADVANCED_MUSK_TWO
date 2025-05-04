@@ -9,11 +9,13 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
+import seaborn as sns
+import matplotlib.pyplot as plt
 import uuid
 import os
 import tempfile
 from data_generator import generate_historical_data, generate_current_year_data
-from model_utils import train_model, tune_model, get_model_explanation, plot_confusion_matrix, plot_feature_importance, recommend_models
+from model_utils import train_model, tune_model, get_model_explanation, plot_confusion_matrix, plot_feature_importance
 
 # Set page config
 st.set_page_config(page_title="Chronic Absenteeism Prediction", layout="wide")
@@ -26,7 +28,6 @@ def clear_session_state():
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     st.session_state.data = None
-    st.session_state.datasets = {}
     st.session_state.models = {}
     st.session_state.current_data = None
     st.session_state.custom_fields = []
@@ -40,8 +41,6 @@ def clear_session_state():
 # Initialize session state
 if 'data' not in st.session_state:
     st.session_state.data = None
-if 'datasets' not in st.session_state:
-    st.session_state.datasets = {}
 if 'models' not in st.session_state:
     st.session_state.models = {}
 if 'current_data' not in st.session_state:
@@ -69,112 +68,80 @@ page_options = [
     "📊 Results",
     "📚 Documentation"
 ]
-default_index = page_options.index(st.session_state.page) if st.session_state.page in page_options else 0
+default_index = 0
+if st.session_state.page in page_options:
+    default_index = page_options.index(st.session_state.page)
 page = st.sidebar.radio("Go to", page_options, index=default_index, label_visibility="collapsed")
 st.session_state.page = page
 
 # Clear All Data Button
 if st.sidebar.button("Clear All Data"):
     clear_session_state()
-    st.rerun()
+    st.experimental_rerun()
 
 # Page 1: Data Configuration
 if st.session_state.page == "📝 Data Configuration":
     st.markdown("""
-    <h1 class="section-header">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" class="header-icon">
+    <h1>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" style="width: 30px; height: 30px; vertical-align: middle; margin-right: 10px;">
             <path d="M3 3h18v18H3V3zm2 2v14h14V5H5zm2 2h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/>
         </svg>
-        Data Configuration
+        📝 Data Configuration
     </h1>
     """, unsafe_allow_html=True)
     
-    # Dataset Settings
-    st.subheader("Generate Historical Data")
-    with st.container():
-        num_students = st.slider("Number of Students", 100, 5000, 1000)
-        year_start, year_end = st.slider("Academic Years", 2010, 2025, (2015, 2020), step=1)
-        school_prefix = st.text_input("School Prefix (e.g., 10U)", "10U")
-        num_schools = st.number_input("Number of Schools", 1, 10, 3)
+    st.header("Generate Historical Data")
+    num_students = st.slider("Number of Students", 100, 5000, 1000)
+    year_start, year_end = st.slider("Academic Years", 2020, 2025, (2020, 2024), step=1)
+    school_prefix = st.text_input("School Prefix (e.g., 10U)", "10U")
+    num_schools = st.number_input("Number of Schools", 1, 10, 3)
     
-    # Student Demographics
-    st.subheader("Student Demographics")
-    with st.container():
-        grades = st.multiselect("Grades", list(range(1, 13)), default=[1, 2, 3, 4, 5])
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            male_dist = st.slider("Male (%)", 0, 100, 40, step=5)
-        with col2:
-            female_dist = st.slider("Female (%)", 0, 100, 40, step=5)
-        with col3:
-            other_dist = st.slider("Other (%)", 0, 100, 20, step=5)
-        
-        total_dist = male_dist + female_dist + other_dist
-        if total_dist != 100:
-            st.error(f"Gender distribution must sum to 100%. Current total: {total_dist}%")
-            gender_dist = None
-        else:
-            gender_dist = [male_dist, female_dist, other_dist]
+    grades = st.multiselect("Grades", list(range(1, 13)), default=[1, 2, 3, 4, 5,6, 7, 8, 9, 10, 11, 12])
     
-    # School Settings
-    st.subheader("School Settings")
-    with st.container():
-        meal_codes = st.multiselect("Meal Codes", ["Free", "Reduced", "Paid"], default=["Free", "Reduced", "Paid"])
-        academic_perf = st.slider("Academic Performance Range (%)", 1, 100, (40, 90))
-        transportation = st.multiselect("Transportation Options", ["Bus", "Walk", "Car"], default=["Bus", "Walk"])
-        suspensions_range = st.slider("Suspensions Range (per year)", 0, 10, (0, 3))
+    st.subheader("Gender Distribution (%)")
+    male_dist = st.slider("Male (%)", 0, 100, 40, step=5)
+    female_dist = st.slider("Female (%)", 0, 100, 40, step=5)
+    other_dist = st.slider("Other (%)", 0, 100, 20, step=5)
     
-    # Attendance Settings
-    st.subheader("Attendance Settings")
-    with st.container():
-        total_days = 180
-        st.write(f"Total School Days: {total_days}")
-        present_days_range = st.slider("Present Days Range", 0, total_days, (100, total_days))
-        
-        # Dynamically constrain absent_days_range based on present_days_range
-        max_absent_days = max(0, total_days - present_days_range[0])
-        absent_days_range = st.slider(
-            "Absent Days Range",
-            0,
-            max_absent_days,
-            (0, min(80, max_absent_days)),
-            help=f"Maximum absent days cannot exceed {max_absent_days} (total days - minimum present days)."
-        )
-        
-        # Enhanced validation for attendance ranges
+    total_dist = male_dist + female_dist + other_dist
+    if total_dist != 100:
+        st.error(f"Gender distribution must sum to 100%. Current total: {total_dist}%")
+        gender_dist = None
+    else:
+        gender_dist = [male_dist, female_dist, other_dist]
+    
+    meal_codes = st.multiselect("Meal Codes", ["Free", "Reduced", "Paid"], default=["Free", "Reduced", "Paid"])
+    academic_perf = st.slider("Academic Performance Range (%)", 1, 100, (40, 90))
+    
+    transportation = st.multiselect("Transportation Options", ["Bus", "Walk", "Car"], default=["Bus", "Walk"])
+    suspensions_range = st.slider("Suspensions Range (per year)", 0, 10, (0, 3))
+    
+    st.subheader("Attendance Data")
+    total_days = 180
+    st.write(f"Total School Days: {total_days}")
+    present_days_range = st.slider("Present Days Range", 0, total_days, (100, total_days))
+    absent_days_range = st.slider("Absent Days Range", 0, total_days, (0, 80))
+    
+    if present_days_range[0] + absent_days_range[1] > total_days or present_days_range[1] + absent_days_range[0] < total_days:
+        st.error(f"Present and Absent days ranges must allow for total days to sum to {total_days}.")
+        attendance_valid = False
+    else:
         attendance_valid = True
-        if present_days_range[0] + absent_days_range[1] > total_days:
-            st.error(f"Error: Minimum present days ({present_days_range[0]}) plus maximum absent days ({absent_days_range[1]}) exceeds total days ({total_days}). Reduce absent days range.")
-            attendance_valid = False
-        elif present_days_range[1] + absent_days_range[0] < total_days:
-            st.error(f"Error: Maximum present days ({present_days_range[1]}) plus minimum absent days ({absent_days_range[0]}) is less than total days ({total_days}). Increase present or absent days range.")
-            attendance_valid = False
-        elif present_days_range[1] < present_days_range[0] or absent_days_range[1] < absent_days_range[0]:
-            st.error("Error: Range maximum must be greater than or equal to minimum.")
-            attendance_valid = False
-        elif total_days - present_days_range[0] < absent_days_range[0]:
-            st.error(f"Error: Maximum possible absent days ({total_days - present_days_range[0]}) is less than minimum absent days ({absent_days_range[0]}). Reduce minimum absent days or lower minimum present days.")
-            attendance_valid = False
-        elif total_days - present_days_range[1] < absent_days_range[0]:
-            st.error(f"Error: Minimum absent days ({absent_days_range[0]}) cannot be achieved with maximum present days ({present_days_range[1]}). Increase maximum absent days or reduce maximum present days.")
-            attendance_valid = False
     
-    # Custom Fields
     st.subheader("Custom Fields")
-    with st.container():
-        if st.button("Add Custom Field"):
-            st.session_state.custom_fields.append({"name": "", "values": ""})
-        
-        for i, field in enumerate(st.session_state.custom_fields):
-            col1, col2, col3 = st.columns([3, 3, 1])
-            with col1:
-                field["name"] = st.text_input(f"Custom Field {i+1} Name", key=f"name_{i}")
-            with col2:
-                field["values"] = st.text_input(f"Custom Field {i+1} Values (comma-separated)", key=f"values_{i}")
-            with col3:
-                if st.button("Remove", key=f"remove_{i}"):
-                    st.session_state.custom_fields.pop(i)
-                    st.rerun()
+    if st.button("Add Custom Field"):
+        st.session_state.custom_fields.append({"name": "", "values": ""})
+    
+    for i, field in enumerate(st.session_state.custom_fields):
+        col1, col2, col3 = st.columns([3, 3, 1])
+        with col1:
+            field["name"] = st.text_input(f"Custom Field {i+1} Name", key=f"name_{i}")
+        with col2:
+            field["values"] = st.text_input(f"Custom Field {i+1} Values (comma-separated)", key=f"values_{i}")
+        with col3:
+            if st.button("Remove", key=f"remove_{i}"):
+                st.session_state.custom_fields.pop(i)
+                st.experimental_rerun()
     
     if st.button("Generate Historical Data") and gender_dist is not None and attendance_valid:
         try:
@@ -186,9 +153,7 @@ if st.session_state.page == "📝 Data Configuration":
                 suspensions_range, present_days_range, absent_days_range, total_days, custom_fields
             )
             st.session_state.data = data
-            dataset_name = f"Dataset_{datetime.now().strftime('%Y-%m-%d_%H:%M')}"
-            st.session_state.datasets[dataset_name] = data
-            st.success(f"Data generated successfully! Saved as {dataset_name}")
+            st.success("Data generated successfully!")
             
             st.subheader("Data Preview")
             st.dataframe(data.head(10))
@@ -197,7 +162,7 @@ if st.session_state.page == "📝 Data Configuration":
             st.download_button("Download Historical Data", csv, "historical_data.csv", "text/csv")
         except Exception as e:
             st.error(f"Error generating data: {str(e)}")
-
+            
 # Page 2: Model Training
 elif st.session_state.page == "🤖 Model Training":
     st.markdown("""
