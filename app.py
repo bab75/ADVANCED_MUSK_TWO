@@ -150,6 +150,12 @@ if st.session_state.page == "📝 Data Configuration":
         elif total_days - present_days_range[1] < absent_days_range[0]:
             st.error(f"Error: Minimum absent days ({absent_days_range[0]}) cannot be achieved with maximum present days ({present_days_range[1]}). Reduce maximum present days or minimum absent days.")
             attendance_valid = False
+        elif present_days_range[0] == present_days_range[1]:
+            st.error(f"Error: Present days range minimum and maximum cannot be equal ({present_days_range[0]}). Adjust the range to allow variability.")
+            attendance_valid = False
+        elif absent_days_range[0] == absent_days_range[1]:
+            st.error(f"Error: Absent days range minimum and maximum cannot be equal ({absent_days_range[0]}). Adjust the range to allow variability.")
+            attendance_valid = False
     
     # Custom Fields
     st.subheader("Custom Fields")
@@ -423,7 +429,7 @@ elif st.session_state.page == "🤖 Model Training":
         
         with st.expander("Model Results"):
             for model_name in models_to_train:
-                if model_name in st.session_state.models:
+                if model_name in st.session_state.models and "y_test" in st.session_state.models[model_name] and "y_pred" in st.session_state.models[model_name]:
                     model_info = st.session_state.models[model_name]
                     metrics = model_info["metrics"]
                     
@@ -458,6 +464,8 @@ elif st.session_state.page == "🤖 Model Training":
                             st.plotly_chart(fig, use_container_width=False)
                     
                     st.write(get_model_explanation(model_name, model_info["X_test_processed"][:1], model_info["model"]))
+                else:
+                    st.warning(f"No results available for {model_name}. Please train the model first.")
         
         with st.expander("Model Comparison"):
             st.subheader("Model Selection & Versioning Dashboard")
@@ -609,6 +617,12 @@ elif st.session_state.page == "📊 Results":
                 current_attendance_valid = False
             elif total_days - present_days_range[1] < absent_days_range[0]:
                 st.error(f"Error: Minimum absent days ({absent_days_range[0]}) cannot be achieved with maximum present days ({present_days_range[1]}). Reduce maximum present days or minimum absent days.")
+                current_attendance_valid = False
+            elif present_days_range[0] == present_days_range[1]:
+                st.error(f"Error: Present days range minimum and maximum cannot be equal ({present_days_range[0]}). Adjust the range to allow variability.")
+                current_attendance_valid = False
+            elif absent_days_range[0] == absent_days_range[1]:
+                st.error(f"Error: Absent days range minimum and maximum cannot be equal ({absent_days_range[0]}). Adjust the range to allow variability.")
                 current_attendance_valid = False
             
             use_historical_ids = st.checkbox("Use Historical Student IDs", value=False, disabled=st.session_state.data is None)
@@ -1079,121 +1093,185 @@ elif st.session_state.page == "📚 Documentation":
                 for model_name in ["Random Forest", "Decision Tree", "Gradient Boosting"]:
                     if model_name in st.session_state.models:
                         model_info = st.session_state.models[model_name]
+                        fig = plot_feature_importance(model_info["model"], model_info["feature Wes"] = {
+                            "model": model,
+                            "metrics": metrics,
+                            "preprocessor": preprocessor,
+                            "feature_names": feature_names,
+                            "best_params": best_params,
+                            "y_test": y_test,
+                            "y_pred": y_pred,
+                            "X_test_processed": X_test_processed
+                        }
+                        
+                        comparison_data.append({
+                            "Model": model_name,
+                            "Version": version_id,
+                            "Timestamp": timestamp,
+                            "Accuracy": metrics['accuracy'],
+                            "Precision": metrics['precision'],
+                            "Recall": metrics['recall'],
+                            "F1 Score": metrics['f1'],
+                            "ROC AUC": metrics['roc_auc']
+                        })
+                        
+                        status_container.success(f"{model_name} trained successfully!")
+                    except Exception as e:
+                        status_container.error(f"Error training {model_name}: {str(e)}")
+                
+                # Generate patterns after training
+                high_risk = st.session_state.data[st.session_state.data[target] == "CA"]
+                if not high_risk.empty:
+                    patterns = []
+                    low_attendance = f"Average Attendance: {high_risk['Attendance_Percentage'].mean():.2f}%"
+                    common_grades = f"Common Grades: {', '.join(map(str, high_risk['Grade'].mode().tolist()))}"
+                    common_meal_codes = f"Common Meal Codes: {', '.join(high_risk['Meal_Code'].mode().tolist())}"
+                    common_transport = f"Common Transportation: {', '.join(high_risk['Transportation'].mode().tolist())}"
+                    
+                    existing_patterns = [p["pattern"] for p in st.session_state.patterns]
+                    for pattern in [low_attendance, common_grades, common_meal_codes, common_transport]:
+                        if pattern not in existing_patterns:
+                            patterns.append({"pattern": pattern, "explanation": "Identified in high-risk students"})
+                    
+                    st.session_state.patterns.extend(patterns)
+                
+                st.success("All models trained successfully!")
+                st.balloons()
+            except Exception as e:
+                st.error(f"Error processing data: {str(e)}")
+        
+        with st.expander("Model Results"):
+            for model_name in models_to_train:
+                if model_name in st.session_state.models and "y_test" in st.session_state.models[model_name] and "y_pred" in st.session_state.models[model_name]:
+                    model_info = st.session_state.models[model_name]
+                    metrics = model_info["metrics"]
+                    
+                    st.subheader(f"{model_name} Results")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown(f"""
+                        <div class="model-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
+                            {model_name}
+                        </div>
+                        """, unsafe_allow_html=True)
+                        st.write(f"Accuracy: {metrics['accuracy']:.2f}")
+                        st.write(f"Precision: {metrics['precision']:.2f}")
+                        st.write(f"Recall: {metrics['recall']:.2f}")
+                        st.write(f"F1 Score: {metrics['f1']:.2f}")
+                        st.write(f"ROC AUC: {metrics['roc_auc']:.2f}")
+                        if model_info["best_params"]:
+                            st.write("Best Parameters:")
+                            st.json(model_info["best_params"])
+                    with col2:
+                        fig = plot_confusion_matrix(model_info["y_test"], model_info["y_pred"])
+                        fig.update_traces(hovertemplate="Predicted: %{x}<br>Actual: %{y}<br>Count: %{z}")
+                        fig.update_layout(width=600, height=400, margin=dict(l=50, r=50, t=50, b=50))
+                        st.plotly_chart(fig, use_container_width=False)
+                    
+                    if model_name in ["Random Forest", "Decision Tree", "Gradient Boosting"]:
                         fig = plot_feature_importance(model_info["model"], model_info["feature_names"])
                         if fig:
-                            with st.expander(f"About Feature Importance Plot ({model_name})"):
-                                st.markdown(f"""
-                                **About Feature Importance Plot ({model_name})**
-
-                                This bar plot shows which features most influence {model_name}'s predictions.
-                                - **Higher bars**: More important features.
-                                - **Hover** to see exact importance scores.
-                                - Use this to identify key risk factors, like low attendance or high suspensions.
-                                """)
-                            st.write(f"Key factors influencing absenteeism (based on {model_name} feature importance):")
                             fig.update_traces(hovertemplate="Feature: %{x}<br>Importance: %{y:.4f}")
                             fig.update_layout(width=600, height=400, margin=dict(l=50, r=50, t=50, b=50))
                             st.plotly_chart(fig, use_container_width=False)
-                            displayed = True
-                            break
-                if not displayed:
-                    st.write("No feature importance available. Train a Random Forest, Decision Tree, or Gradient Boosting model to view key factors.")
-            else:
-                st.info("Train models to enable AI-powered pattern recognition.")
+                    
+                    st.write(get_model_explanation(model_name, model_info["X_test_processed"][:1], model_info["model"]))
+                else:
+                    st.warning(f"No results available for {model_name}. Please train the model first.")
         
-        with st.expander("Group Analysis & Comparisons"):
-            st.subheader("Group Analysis & Comparisons")
-            with st.expander("About Group Analysis & Comparisons"):
-                st.markdown("""
-                **About Group Analysis & Comparisons**
-
-                This section allows you to filter students by attributes (e.g., Grade, Gender, School) and visualize attendance trends.
-                - **Purpose**: Identify at-risk groups, such as grades with low attendance or schools with high absenteeism.
-                - **Insights**:
-                  - Compare average attendance across groups to spot trends.
-                  - Use violin plots to see attendance variability within groups.
-                  - Filter to focus on specific demographics or conditions.
-                - **Use Case**: Target interventions, like tutoring for low-performing grades or transportation support for specific schools.
-                """)
-            
-            st.write("**Filter Students**")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                filter_grade = st.multiselect("Filter by Grade", sorted(st.session_state.data["Grade"].unique()), key="filter_grade")
-                filter_gender = st.multiselect("Filter by Gender", st.session_state.data["Gender"].unique(), key="filter_gender")
-            with col2:
-                filter_school = st.multiselect("Filter by School", st.session_state.data["School"].unique(), key="filter_school")
-                filter_meal = st.multiselect("Filter by Meal Code", st.session_state.data["Meal_Code"].unique(), key="filter_meal")
-            with col3:
-                filter_transport = st.multiselect("Filter by Transportation", st.session_state.data["Transportation"].unique(), key="filter_transport")
-            
-            filtered_data = st.session_state.data
-            if filter_grade:
-                filtered_data = filtered_data[filtered_data["Grade"].isin(filter_grade)]
-            if filter_gender:
-                filtered_data = filtered_data[filtered_data["Gender"].isin(filter_gender)]
-            if filter_school:
-                filtered_data = filtered_data[filtered_data["School"].isin(filter_school)]
-            if filter_meal:
-                filtered_data = filtered_data[filtered_data["Meal_Code"].isin(filter_meal)]
-            if filter_transport:
-                filtered_data = filtered_data[filtered_data["Transportation"].isin(filter_transport)]
-            
-            if not filtered_data.empty:
-                group_by = st.selectbox("Group By", ["Grade", "Gender", "School", "Meal_Code", "Transportation"])
-                trend_data = filtered_data.groupby(group_by)["Attendance_Percentage"].mean().reset_index()
+        with st.expander("Model Comparison"):
+            st.subheader("Model Selection & Versioning Dashboard")
+            if st.session_state.model_versions:
+                version_data = []
+                for model_name, versions in st.session_state.model_versions.items():
+                    for version in versions:
+                        version_data.append({
+                            "Model": model_name,
+                            "Version ID": version["version_id"],
+                            "Timestamp": version["timestamp"],
+                            "Accuracy": version["metrics"]["accuracy"],
+                            "Precision": version["metrics"]["precision"],
+                            "Recall": version["metrics"]["recall"],
+                            "F1 Score": version["metrics"]["f1"],
+                            "ROC AUC": version["metrics"]["roc_auc"]
+                        })
+                version_df = pd.DataFrame(version_data)
+                st.dataframe(version_df)
                 
-                with st.expander("About Average Attendance Bar Plot"):
-                    st.markdown("""
-                    **About Average Attendance Bar Plot**
+                with st.form("compare_form"):
+                    st.write("Compare Model Versions")
+                    compare_models = st.multiselect(
+                        "Select Models to Compare",
+                        list(st.session_state.model_versions.keys()),
+                        default=st.session_state.compare_models,
+                        key="compare_models_select"
+                    )
+                    if st.form_submit_button("Compare"):
+                        st.session_state.compare_models = compare_models
+                        if compare_models:
+                            compare_data = []
+                            for model_name in compare_models:
+                                for version in st.session_state.model_versions[model_name]:
+                                    compare_data.append({
+                                        "Model": f"{model_name} ({version['version_id'][:8]})",
+                                        "Accuracy": version["metrics"]["accuracy"],
+                                        "Precision": version["metrics"]["precision"],
+                                        "Recall": version["metrics"]["recall"],
+                                        "F1 Score": version["metrics"]["f1"],
+                                        "ROC AUC": version["metrics"]["roc_auc"]
+                                    })
+                            if compare_data:
+                                compare_df = pd.DataFrame(compare_data)
+                                fig = go.Figure()
+                                for metric in ["Accuracy", "Precision", "Recall", "F1 Score", "ROC AUC"]:
+                                    fig.add_trace(go.Bar(
+                                        x=compare_df["Model"],
+                                        y=compare_df[metric],
+                                        name=metric,
+                                        hovertemplate=f"{metric}: %{{y:.2f}}"
+                                    ))
+                                fig.update_layout(
+                                    title="Model Version Comparison",
+                                    barmode="group",
+                                    xaxis_title="Model (Version)",
+                                    yaxis_title="Score",
+                                    width=600,
+                                    height=400,
+                                    margin=dict(l=50, r=50, t=50, b=50)
+                                )
+                                with st.expander("About Model Comparison Chart"):
+                                    st.markdown("""
+                                    **About Model Comparison Chart**
 
-                    This bar plot shows the average attendance percentage for each group (e.g., by Grade).
-                    - **Hover** to see exact attendance values.
-                    - Use this to identify groups with lower attendance for targeted interventions.
-                    """)
-                fig = go.Figure()
-                fig.add_trace(go.Bar(
-                    x=trend_data[group_by],
-                    y=trend_data["Attendance_Percentage"],
-                    marker_color="#3498db",
-                    hovertemplate=f"{group_by}: %{{x}}<br>Attendance: %{{y:.2f}}%"
-                ))
-                fig.update_layout(
-                    title=f"Average Attendance by {group_by}",
-                    xaxis_title=group_by,
-                    yaxis_title="Attendance Percentage",
-                    width=600,
-                    height=400,
-                    margin=dict(l=50, r=50, t=50, b=50)
-                )
-                st.plotly_chart(fig, use_container_width=False)
-                
-                with st.expander("About Attendance Distribution Violin Plot"):
-                    st.markdown("""
-                    **About Attendance Distribution Violin Plot**
+                                    This bar chart compares the performance of selected model versions across key metrics:
+                                    - **Accuracy**: Proportion of correct predictions.
+                                    - **Precision**: Proportion of positive predictions that were correct.
+                                    - **Recall**: Proportion of actual positives correctly identified.
+                                    - **F1 Score**: Harmonic mean of precision and recall.
+                                    - **ROC AUC**: Area under the receiver operating characteristic curve, measuring model discrimination.
 
-                    This violin plot shows the distribution of attendance percentages within each group.
-                    - **Wider sections**: Higher density of students at that attendance level.
-                    - **Hover** to see summary statistics.
-                    - Use this to understand attendance variability and identify outliers.
-                    """)
-                fig = go.Figure()
-                for group in filtered_data[group_by].unique():
-                    group_data = filtered_data[filtered_data[group_by] == group]["Attendance_Percentage"]
-                    fig.add_trace(go.Violin(
-                        x=[group] * len(group_data),
-                        y=group_data,
-                        name=str(group),
-                        box_visible=True,
-                        meanline_visible=True,
-                        hovertemplate=f"{group_by}: {group}<br>Attendance: %{{y:.2f}}%"
-                    ))
-                fig.update_layout(
-                    title=f"Attendance Distribution by {group_by}",
-                    xaxis_title=group_by,
-                    yaxis_title="Attendance Percentage",
-                    width=600,
-                    height=400,
-                    margin=dict(l=50, r=50, t=50, b=50)
-                )
-                st.plotly_chart(fig, use_container_width=False)
+                                    Use this to identify the best-performing models for chronic absenteeism prediction.
+                                    Hover over bars to see exact metric values.
+                                    """)
+                                st.plotly_chart(fig, use_container_width=False)
+                        else:
+                            st.warning("Please select at least one model to compare.")
+        
+        with st.expander("Pattern Discovery"):
+            if st.session_state.models:
+                st.write(f"Number of patterns learned: {len(st.session_state.patterns)}")
+                if st.session_state.patterns:
+                    for pattern in st.session_state.patterns:
+                        st.write(f"- {pattern['pattern']}: {pattern['explanation']}")
+                else:
+                    st.info("No patterns identified yet.")
+            else:
+                st.info("No patterns discovered yet. Train models to identify patterns.")
+
+# Page 3: Results
+elif st.session_state.page == "📊 Results":
+    st.markdown("""
+    <h1 class="section-header">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db" class="header-icon">
+            <path d="M3 3
