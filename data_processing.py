@@ -1,128 +1,108 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import LabelEncoder, StandardScaler
-import streamlit as st
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from model_utils import calculate_drop_off
 
 def load_uploaded_data(file):
-    """Load and validate uploaded CSV data."""
+    """
+    Load and validate uploaded CSV data.
+    """
     try:
-        data = pd.read_csv(file, dtype_backend="pandas", low_memory=False)
-        if data.empty:
-            raise ValueError("Uploaded CSV is empty.")
-        if "Student_ID" in data.columns:
-            data["Student_ID"] = data["Student_ID"].astype(str)
-        if "School" in data.columns:
-            data["School"] = data["School"].astype(str)
+        data = pd.read_csv(file)
+        required_columns = ['Student_ID', 'School', 'Grade', 'Gender', 'Meal_Code', 
+                          'Academic_Performance', 'Transportation', 'Suspensions', 
+                          'Present_Days', 'Absent_Days', 'Attendance_Percentage']
+        missing_cols = [col for col in required_columns if col not in data.columns]
+        if missing_cols:
+            raise ValueError(f"Missing required columns: {', '.join(missing_cols)}")
         return data
     except Exception as e:
         raise ValueError(f"Error loading CSV: {str(e)}")
 
 def compute_high_risk_baselines(data):
-    """Compute statistical baselines for high-risk identification."""
+    """
+    Compute baseline thresholds for high-risk students based on historical data.
+    """
     try:
-        numeric_cols = data.select_dtypes(include=[np.number]).columns
         baselines = {}
-        for col in numeric_cols:
-            if col not in ["Student_ID", "School", "Year"]:
-                baselines
-
-[col] = {
-                    "mean": data[col].mean(),
-                    "std": data[col].std()
+        for col in ['Attendance_Percentage', 'Academic_Performance', 'Suspensions']:
+            if col in data.columns:
+                baselines[col] = {
+                    'mean': data[col].mean(),
+                    'std': data[col].std(),
+                    'high_risk_threshold': data[col].mean() - data[col].std()
                 }
         return baselines
     except Exception as e:
-        st.warning(f"Error computing high-risk baselines: {str(e)}")
-        return {}
+        raise ValueError(f"Error computing baselines: {str(e)}")
 
-def preprocess_data(data, features, targets):
-    """Preprocess data for training or prediction, handling all data types."""
+def preprocess_data(data, features, target=None, encoder=None):
+    """
+    Preprocess data for model training or prediction.
+    """
     try:
-        # Ensure data is a DataFrame
-        data = pd.DataFrame(data)
+        # Drop rows with missing values in features or target
+        columns_to_check = features + ([target] if target else [])
+        data = data.dropna(subset=columns_to_check)
         
-        # Define columns to always treat as categorical (identifiers or non-features)
-        categorical_cols = ["Student_ID", "School"]
+        # Separate features and target
+        X = data[features]
+        y = data[target] if target else None
         
-        # Handle missing values
-        for col in data.columns:
-            if col in data.select_dtypes(include=[np.number]).columns:
-                data[col] = data[col].fillna(data[col].mean())
-            else:
-                data[col] = data[col].fillna(data[col].mode().iloc[0] if not data[col].mode().empty else "Unknown")
+        # Identify categorical and numerical columns
+        categorical_cols = [col for col in features if X[col].dtype == "object" or X[col].dtype.name == "category"]
+        numerical_cols = [col for col in features if col not in categorical_cols]
         
-        # Initialize X and y
-        X = data[features].copy() if features else pd.DataFrame()
-        y = pd.DataFrame()
+        # Create preprocessing pipeline
+        if not encoder:
+            preprocessor = ColumnTransformer(
+                transformers=[
+                    ('num', StandardScaler(), numerical_cols),
+                    ('cat', OneHotEncoder(drop='first', sparse_output=False, handle_unknown='ignore'), categorical_cols)
+                ])
+            preprocessor.fit(X)
+        else:
+            preprocessor = encoder
         
-        # Ensure School is treated as categorical if included in features
-        for col in X.columns:
-            if col in categorical_cols or X[col].dtype == "object" or X[col].dtype.name == "category":
-                categorical_cols.append(col) if col not in categorical_cols else None
+        # Transform features
+        X_transformed = preprocessor.transform(X)
         
-        # Remove duplicates in categorical_cols
-        categorical_cols = list(set(categorical_cols) & set(X.columns))
+        # Get feature names after encoding
+        if categorical_cols:
+            cat_features = preprocessor.named_transformers_['cat'].get_feature_names_out(categorical_cols)
+            feature_names = numerical_cols + list(cat_features)
+        else:
+            feature_names = numerical_cols
         
-        # Numerical columns are those not in categorical_cols
-        numerical_cols = [col for col in X.columns if col not in categorical_cols]
+        # Convert to DataFrame
+        X_transformed = pd.DataFrame(X_transformed, columns=feature_names, index=X.index)
         
-        # Encode categorical features
-        label_encoders = {}
-        for col in categorical_cols:
-            if col in X.columns:
-                try:
-                    le = LabelEncoder()
-                    X[col] = le.fit_transform(X[col].astype(str))
-                    label_encoders[col] = le
-                except Exception as e:
-                    st.warning(f"Error encoding feature {col}: {str(e)}")
-                    X[col] = 0
-        
-        # Scale numerical features only
-        scaler = StandardScaler()
-        if numerical_cols:
-            try:
-                X[numerical_cols] = scaler.fit_transform(X[numerical_cols])
-            except Exception as e:
-                st.warning(f"Error scaling numerical features: {str(e)}")
-                X[numerical_cols] = 0
-        
-        # Process targets
-        if targets:
-            y = data[targets].copy()
-            for col in y.columns:
-                if y[col].dtype == "object" or y[col].dtype.name == "category" or y[col].dtype == "bool":
-                    try:
-                        if y[col].isna().any():
-                            raise ValueError(f"Target column {col} contains missing values.")
-                        unique_values = y[col].dropna().unique()
-                        if len(unique_values) < 2:
-                            raise ValueError(f"Target column {col} has fewer than 2 unique values.")
-                        le = LabelEncoder()
-                        y[col] = le.fit_transform(y[col].astype(str))
-                    except Exception as e:
-                        st.warning(f"Error encoding target {col}: {str(e)}")
-                        y[col] = 0
-                else:
-                    # Ensure target is binary or categorical
-                    unique_values = y[col].dropna().unique()
-                    if len(unique_values) > 2:
-                        st.warning(f"Target column {col} has more than 2 unique values, treating as numeric may cause errors.")
-        
-        return X, y
+        return X_transformed, y, preprocessor
     except Exception as e:
         raise ValueError(f"Error preprocessing data: {str(e)}")
 
 def combine_datasets(datasets):
-    """Combine multiple datasets into a single DataFrame."""
+    """
+    Combine multiple datasets into a single DataFrame.
+    """
     try:
         if not datasets:
-            return pd.DataFrame()
+            raise ValueError("No datasets provided")
+        
+        # Ensure all datasets have the same columns
+        columns = datasets[0].columns
+        for i, ds in enumerate(datasets[1:], 1):
+            if set(ds.columns) != set(columns):
+                raise ValueError(f"Dataset {i} has different columns")
+        
+        # Concatenate datasets
         combined = pd.concat(datasets, ignore_index=True)
-        if "Student_ID" in combined.columns:
-            combined["Student_ID"] = combined["Student_ID"].astype(str)
-        if "School" in combined.columns:
-            combined["School"] = combined["School"].astype(str)
+        
+        # Drop duplicates based on Student_ID
+        combined = combined.drop_duplicates(subset=['Student_ID'], keep='last')
+        
         return combined
     except Exception as e:
         raise ValueError(f"Error combining datasets: {str(e)}")
