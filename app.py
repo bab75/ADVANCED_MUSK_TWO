@@ -265,6 +265,10 @@ elif st.session_state.page == "🤖 Model Training":
             feature_toggles = {f: st.checkbox(f, value=f in default_features, key=f"feature_{f}") for f in available_features}
             features = [f for f, enabled in feature_toggles.items() if enabled]
             
+            # Warn if School is selected
+            if "School" in features:
+                st.warning("The 'School' column is included as a feature. It will be encoded as a categorical variable. Ensure this is intentional, as it may increase model complexity.")
+            
             # Warn if non-numeric features are selected
             non_numeric_features = [f for f in features if combined_data[f].dtype == "object" or combined_data[f].dtype.name == "category"]
             if non_numeric_features:
@@ -585,6 +589,10 @@ elif st.session_state.page == "📊 Results":
         default_features = st.session_state.training_features if st.session_state.training_features else [col for col in available_features if col in ["Grade", "Gender", "Meal_Code", "Academic_Performance", "Transportation", "Suspensions", "Present_Days", "Absent_Days", "Attendance_Percentage"] or col in [f["name"] for f in st.session_state.current_custom_fields if f["name"]]]
         feature_toggles = {f: st.checkbox(f, value=f in default_features, key=f"predict_feature_{f}") for f in available_features}
         features = [f for f, enabled in feature_toggles.items() if enabled]
+        
+        # Warn if School is selected
+        if "School" in features:
+            st.warning("The 'School' column is included as a feature. It will be encoded as a categorical variable. Ensure this is intentional, as it may increase model complexity.")
         
         # Warn if prediction features differ from training features
         if st.session_state.training_features and set(features) != set(st.session_state.training_features):
