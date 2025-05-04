@@ -25,7 +25,7 @@ def generate_historical_data(
     gender_probs = [p / 100 for p in gender_dist]
     
     data = []
-    student_ids = [f"{'S' + str(i).zfill(id_length - 1)}" for i in range(1, num_students + 1)]
+    student_ids = [f"{'H' + str(i).zfill(id_length - 1)}" for i in range(1, num_students + 1)]
     
     for student_id in student_ids:
         for year in years:
@@ -50,6 +50,7 @@ def generate_historical_data(
             
             ca_threshold = (total_days * (100 - dropoff_percent)) / 100
             ca_status = "CA" if present_days < ca_threshold else "Non-CA"
+            drop_off = "Y" if ca_status == "CA" else "N"
             
             student_data = {
                 "Student_ID": student_id,
@@ -64,7 +65,8 @@ def generate_historical_data(
                 "Present_Days": present_days,
                 "Absent_Days": absent_days,
                 "Attendance_Percentage": attendance_percentage,
-                "CA_Status": ca_status
+                "CA_Status": ca_status,
+                "Drop_Off": drop_off
             }
             
             for field_name, field_values in custom_fields:
@@ -101,10 +103,10 @@ def generate_current_year_data(
         if len(student_ids) > num_students:
             student_ids = random.sample(student_ids, num_students)
         elif len(student_ids) < num_students:
-            additional_ids = [f"{'S' + str(i).zfill(id_length - 1)}" for i in range(len(student_ids) + 1, num_students + 1)]
+            additional_ids = [f"{'C' + str(i).zfill(id_length - 1)}" for i in range(len(student_ids) + 1, num_students + 1)]
             student_ids.extend(additional_ids)
     else:
-        student_ids = [f"{'S' + str(i).zfill(id_length - 1)}" for i in range(1, num_students + 1)]
+        student_ids = [f"{'C' + str(i).zfill(id_length - 1)}" for i in range(1, num_students + 1)]
     
     for student_id in student_ids:
         grade = random.choice(grades)
@@ -132,6 +134,7 @@ def generate_current_year_data(
         
         ca_threshold = (total_days * (100 - dropoff_percent)) / 100
         ca_status = "CA" if present_days < ca_threshold else "Non-CA"
+        drop_off = "Y" if ca_status == "CA" else "N"
         
         student_data = {
             "Student_ID": student_id,
@@ -146,7 +149,8 @@ def generate_current_year_data(
             "Present_Days": present_days,
             "Absent_Days": absent_days,
             "Attendance_Percentage": attendance_percentage,
-            "CA_Status": ca_status
+            "CA_Status": ca_status,
+            "Drop_Off": drop_off
         }
         
         for field_name, field_values in custom_fields:
