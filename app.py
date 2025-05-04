@@ -132,7 +132,7 @@ if st.session_state.page == "📝 Data Configuration":
         present_days_range = st.slider("Present Days Range", 0, total_days, (100, total_days))
         
         # Dynamically constrain absent_days_range based on present_days_range
-        max_absent_days = total_days - present_days_range[0]
+        max_absent_days = max(0, total_days - present_days_range[0])
         absent_days_range = st.slider(
             "Absent Days Range",
             0,
