@@ -8,9 +8,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
-import seaborn as sns
-import matplotlib.pyplot as plt
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.multioutput import MultiOutputClassifier
 import uuid
 import os
 import tempfile
@@ -28,9 +27,9 @@ st.markdown('<style>' + open('styles.css').read() + '</style>', unsafe_allow_htm
 def clear_session_state():
     for key in list(st.session_state.keys()):
         del st.session_state[key]
-    st.session_state.data = None
-    st.session_state.models = {}
+    st.session_state.datasets = {}
     st.session_state.current_data = None
+    st.session_state.models = {}
     st.session_state.custom_fields = []
     st.session_state.current_custom_fields = []
     st.session_state.selected_student_id = None
@@ -42,12 +41,12 @@ def clear_session_state():
     st.session_state.high_risk_baselines = None
 
 # Initialize session state
-if 'data' not in st.session_state:
-    st.session_state.data = None
-if 'models' not in st.session_state:
-    st.session_state.models = {}
+if 'datasets' not in st.session_state:
+    st.session_state.datasets = {}
 if 'current_data' not in st.session_state:
     st.session_state.current_data = None
+if 'models' not in st.session_state:
+    st.session_state.models = {}
 if 'custom_fields' not in st.session_state:
     st.session_state.custom_fields = []
 if 'current_custom_fields' not in st.session_state:
@@ -69,14 +68,9 @@ if 'drop_off_rules' not in st.session_state:
 if 'high_risk_baselines' not in st.session_state:
     st.session_state.high_risk_baselines = None
 
-# Sidebar navigation with radio buttons
+# Sidebar navigation
 st.sidebar.title("Navigation")
-page_options = [
-    "📝 Data Configuration",
-    "🤖 Model Training",
-    "📊 Results",
-    "📚 Documentation"
-]
+page_options = ["📝 Data Configuration", "🤖 Model Training", "📊 Results", "📚 Documentation"]
 default_index = page_options.index(st.session_state.page) if st.session_state.page in page_options else 0
 page = st.sidebar.radio("Go to", page_options, index=default_index, label_visibility="collapsed")
 st.session_state.page = page
@@ -86,7 +80,7 @@ if st.sidebar.button("Clear All Data"):
     clear_session_state()
     st.experimental_rerun()
 
-# Compute high-risk baselines if historical data exists
+# Compute high-risk baselines
 def compute_high_risk_baselines(data):
     if data is not None:
         high_risk = data[data["CA_Status"] == "CA"]
@@ -110,13 +104,28 @@ if st.session_state.page == "📝 Data Configuration":
     </h1>
     """, unsafe_allow_html=True)
     
-    st.header("Generate Historical Data")
+    st.header("Manage Historical Datasets")
+    data_source = st.radio("Data Source", ["Generate Data", "Upload CSV"])
+    
+    if data_source == "Upload CSV":
+        uploaded_file = st.file_uploader("Upload Historical Data (CSV)", type=["csv"])
+        dataset_name = st.text_input("Dataset Name", "Uploaded_Dataset")
+        if uploaded_file and dataset_name:
+            try:
+                data = pd.read_csv(uploaded_file)
+                st.session_state.datasets[dataset_name] = data
+                st.success(f"Dataset '{dataset_name}' uploaded successfully!")
+            except Exception as e:
+                st.error(f"Error uploading data: {str(e)}")
+    
+    st.subheader("Generate Historical Data")
     num_students = st.slider("Number of Students", 100, 5000, 1000)
     year_start, year_end = st.slider("Academic Years", 2020, 2025, (2020, 2024), step=1)
     school_prefix = st.text_input("School Prefix (e.g., 10U)", "10U")
     num_schools = st.number_input("Number of Schools", 1, 10, 3)
     id_length = st.radio("Student ID Length", [5, 7], index=0)
-    dropoff_percent = st.slider("Target CA Percentage (%)", 5, 50, 20, step=5, help="Percentage of students with CA Status = CA")
+    dropoff_percent = st.slider("Target CA Percentage (%)", 5, 50, 20, step=5)
+    dataset_name = st.text_input("Generated Dataset Name", f"Historical_{year_start}_{year_end}")
     
     grades = st.multiselect("Grades", list(range(1, 13)), default=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
     
@@ -134,63 +143,34 @@ if st.session_state.page == "📝 Data Configuration":
     
     meal_codes = st.multiselect("Meal Codes", ["Free", "Reduced", "Paid"], default=["Free", "Reduced", "Paid"])
     academic_perf = st.slider("Academic Performance Range (%)", 1, 100, (40, 90))
-    if academic_perf[0] >= academic_perf[1]:
-        st.error("Academic Performance Range: Minimum must be less than maximum.")
-        academic_perf_valid = False
-    else:
-        academic_perf_valid = True
+    academic_perf_valid = academic_perf[0] < academic_perf[1]
     
     transportation = st.multiselect("Transportation Options", ["Bus", "Walk", "Car"], default=["Bus", "Walk"])
     suspensions_range = st.slider("Suspensions Range (per year)", 0, 10, (0, 3))
-    if suspensions_range[0] >= suspensions_range[1]:
-        st.error("Suspensions Range: Minimum must be less than maximum.")
-        suspensions_valid = False
-    else:
-        suspensions_valid = True
+    suspensions_valid = suspensions_range[0] <= suspensions_range[1]
     
     st.subheader("Attendance Data")
     total_days = 180
     st.write(f"Total School Days: {total_days}")
     present_days_range = st.slider("Present Days Range", 0, total_days, (100, 180))
-    if present_days_range[0] >= present_days_range[1]:
-        st.error("Present Days Range: Minimum must be less than maximum.")
-        present_days_valid = False
-    else:
-        present_days_valid = True
+    present_days_valid = present_days_range[0] < present_days_range[1]
     
     max_absent_days = total_days - present_days_range[0]
     if max_absent_days <= 0:
-        st.error(f"Error: Minimum present days ({present_days_range[0]}) equals or exceeds total days ({total_days}). Reduce minimum present days.")
         max_absent_days = 1
     absent_days_range = st.slider(
         "Absent Days Range",
-        0,
-        max_absent_days,
-        (0, min(80, max_absent_days)),
-        help=f"Maximum absent days cannot exceed {max_absent_days}."
+        0, max_absent_days, (0, min(80, max_absent_days))
     )
-    if absent_days_range[0] >= absent_days_range[1]:
-        st.error("Absent Days Range: Minimum must be less than maximum.")
-        absent_days_valid = False
-    else:
-        absent_days_valid = True
+    absent_days_valid = absent_days_range[0] <= absent_days_range[1]
     
-    attendance_valid = True
-    if max_absent_days <= 0:
-        st.error(f"Error: Minimum present days ({present_days_range[0]}) equals or exceeds total days ({total_days}).")
-        attendance_valid = False
-    elif present_days_range[0] >= present_days_range[1]:
-        st.error(f"Error: Minimum present days ({present_days_range[0]}) must be less than maximum present days ({present_days_range[1]}).")
-        attendance_valid = False
-    elif absent_days_range[0] >= absent_days_range[1]:
-        st.error(f"Error: Minimum absent days ({absent_days_range[0]}) must be less than maximum absent days ({absent_days_range[1]}).")
-        attendance_valid = False
-    elif present_days_range[0] + absent_days_range[1] > total_days:
-        st.error(f"Error: Minimum present days ({present_days_range[0]}) plus maximum absent days ({absent_days_range[1]}) exceeds total days ({total_days}).")
-        attendance_valid = False
-    elif present_days_range[1] + absent_days_range[0] < total_days:
-        st.error(f"Error: Maximum present days ({present_days_range[1]}) plus minimum absent days ({absent_days_range[0]}) is less than total days ({total_days}).")
-        attendance_valid = False
+    attendance_valid = (
+        max_absent_days > 0 and
+        present_days_valid and
+        absent_days_valid and
+        present_days_range[0] + absent_days_range[1] <= total_days and
+        present_days_range[1] + absent_days_range[0] >= total_days
+    )
     
     st.subheader("Custom Fields")
     if st.button("Add Custom Field"):
@@ -210,24 +190,19 @@ if st.session_state.page == "📝 Data Configuration":
     st.subheader("Drop Off Rules")
     with st.expander("Define Drop Off Rules (Optional)", expanded=False):
         st.markdown("""
-        Define rules to assign `Drop_Off = 'Y'` for students with `CA_Status = 'CA'`.  
-        - Specify an **Attendance Percentage Range** to filter CA students.  
-        - Select **Features** (e.g., Transportation, Meal Code) and their values to include.  
-        - Only CA students meeting all conditions will have `Drop_Off = 'Y'`; others get `Drop_Off = 'N'`.  
+        Define rules to assign `Drop_Off = 'Y'` for CA students.  
+        - Specify an **Attendance Percentage Range**.  
+        - Select **Features** and their values.  
+        - Only CA students meeting all conditions get `Drop_Off = 'Y'`; others get `Drop_Off = 'N'`.  
         - Leave empty to assign `Drop_Off = 'Y'` to all CA students.
         """)
         attendance_min = st.slider("Attendance Percentage Min (%)", 0, 100, 0, step=5)
         attendance_max = st.slider("Attendance Percentage Max (%)", 0, 100, 80, step=5)
-        if attendance_min > attendance_max:
-            st.error("Attendance Percentage Min must be less than or equal to Max.")
-            drop_off_rules_valid = False
-        else:
-            drop_off_rules_valid = True
+        drop_off_rules_valid = attendance_min <= attendance_max
         
         drop_off_features = st.multiselect(
             "Select Features for Drop Off Rules",
-            ["Grade", "Transportation", "Meal_Code", "Gender", "School"] + [f["name"] for f in st.session_state.custom_fields if f["name"]],
-            key="drop_off_features"
+            ["Grade", "Transportation", "Meal_Code", "Gender", "School"] + [f["name"] for f in st.session_state.custom_fields if f["name"]]
         )
         drop_off_rules = {"attendance_min": attendance_min, "attendance_max": attendance_max, "features": {}}
         
@@ -245,15 +220,12 @@ if st.session_state.page == "📝 Data Configuration":
                 values = st.multiselect(f"Select {feature} Values", schools, default=schools, key=f"drop_off_{feature}")
             else:
                 custom_field = next((f for f in st.session_state.custom_fields if f["name"] == feature), None)
-                if custom_field:
-                    values_list = [v.strip() for v in custom_field["values"].split(",")]
-                    values = st.multiselect(f"Select {feature} Values", values_list, default=values_list, key=f"drop_off_{feature}")
-                else:
-                    values = []
+                values_list = [v.strip() for v in custom_field["values"].split(",")] if custom_field else []
+                values = st.multiselect(f"Select {feature} Values", values_list, default=values_list, key=f"drop_off_{feature}")
             if values:
                 drop_off_rules["features"][feature] = values
     
-    generate_disabled = not (gender_dist is not None and attendance_valid and academic_perf_valid and suspensions_valid and present_days_valid and absent_days_valid and drop_off_rules_valid)
+    generate_disabled = not (gender_dist is not None and attendance_valid and academic_perf_valid and suspensions_valid and drop_off_rules_valid)
     if st.button("Generate Historical Data", disabled=generate_disabled):
         try:
             st.session_state.patterns = []
@@ -265,17 +237,21 @@ if st.session_state.page == "📝 Data Configuration":
                 suspensions_range, present_days_range, absent_days_range, total_days,
                 custom_fields, id_length, dropoff_percent, drop_off_rules
             )
-            st.session_state.data = data
+            st.session_state.datasets[dataset_name] = data
             st.session_state.high_risk_baselines = compute_high_risk_baselines(data)
-            st.success("Data generated successfully!")
+            st.success(f"Dataset '{dataset_name}' generated successfully!")
             
             st.subheader("Data Preview")
             st.dataframe(data.head(10))
             
             csv = data.to_csv(index=False)
-            st.download_button("Download Historical Data", csv, "historical_data.csv", "text/csv")
+            st.download_button("Download Historical Data", csv, f"{dataset_name}.csv", "text/csv")
         except Exception as e:
             st.error(f"Error generating data: {str(e)}")
+    
+    if st.session_state.datasets:
+        st.subheader("Available Datasets")
+        st.dataframe(pd.DataFrame({"Dataset Name": list(st.session_state.datasets.keys())}))
 
 # Page 2: Model Training
 elif st.session_state.page == "🤖 Model Training":
@@ -288,32 +264,22 @@ elif st.session_state.page == "🤖 Model Training":
     </h1>
     """, unsafe_allow_html=True)
     
-    st.header("Load Data")
-    data_source = st.radio("Data Source", ["Use Generated Data", "Upload CSV"])
-    
-    if data_source == "Upload CSV":
-        uploaded_file = st.file_uploader("Upload Historical Data (CSV)", type=["csv"])
-        if uploaded_file:
-            try:
-                st.session_state.data = pd.read_csv(uploaded_file)
-                st.session_state.patterns = []
-                st.session_state.high_risk_baselines = compute_high_risk_baselines(st.session_state.data)
-                st.success("Data uploaded successfully!")
-            except Exception as e:
-                st.error(f"Error uploading data: {str(e)}")
-    
-    if st.session_state.data is not None:
-        st.subheader("Feature Selection")
-        excluded_features = ["Student_ID", "CA_Status", "Drop_Off"]
-        available_features = [col for col in st.session_state.data.columns if col not in excluded_features]
-        feature_toggles = {}
-        st.write("Toggle Features:")
-        for feature in available_features:
-            feature_toggles[feature] = st.checkbox(feature, value=True, key=f"feature_{feature}")
-        features = [f for f, enabled in feature_toggles.items() if enabled]
-        target = "CA_Status"
+    st.header("Select Dataset")
+    if st.session_state.datasets:
+        selected_dataset = st.selectbox("Select Historical Dataset", list(st.session_state.datasets.keys()))
+        data = st.session_state.datasets[selected_dataset]
         
-        categorical_cols = [col for col in features if st.session_state.data[col].dtype == "object"]
+        st.subheader("Target Selection")
+        target_options = ["CA_Status", "Drop_Off"]
+        targets = st.multiselect("Select Target Variables", target_options, default=["CA_Status"])
+        
+        st.subheader("Feature Selection")
+        excluded_features = ["Student_ID"] + target_options
+        available_features = [col for col in data.columns if col not in excluded_features]
+        feature_toggles = {f: st.checkbox(f, value=True, key=f"feature_{f}") for f in available_features}
+        features = [f for f, enabled in feature_toggles.items() if enabled]
+        
+        categorical_cols = [col for col in features if data[col].dtype == "object"]
         numerical_cols = [col for col in features if col not in categorical_cols]
         
         st.subheader("Model Selection")
@@ -321,24 +287,21 @@ elif st.session_state.page == "🤖 Model Training":
             st.markdown("""
             **Model Selection Guide**
 
-            - **Logistic Regression**: Best for interpretable results.
-              - [Learn More](https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression)
-            - **Random Forest**: Robust to overfitting.
-              - [Learn More](https://scikit-learn.org/stable/modules/ensemble.html#random-forests)
-            - **Decision Tree**: Easy to interpret but may overfit.
-              - [Learn More](https://scikit-learn.org/stable/modules/tree.html)
-            - **SVM**: Effective for non-linear data.
-              - [Learn More](https://scikit-learn.org/stable/modules/svm.html)
-            - **Gradient Boosting**: Powerful for predictive accuracy.
-              - [Learn More](https://scikit-learn.org/stable/modules/ensemble.html#gradient-boosting)
-            - **Neural Network**: Suitable for large datasets.
-              - [Learn More](https://scikit-learn.org/stable/modules/neural_networks_supervised.html)
+            - **Logistic Regression**: Interpretable, suitable for single-target.
+            - **Random Forest**: Robust, handles multi-target well.
+            - **Decision Tree**: Simple, interpretable, but may overfit.
+            - **SVM**: Effective for non-linear data, single-target preferred.
+            - **Gradient Boosting**: High accuracy, supports multi-target.
+            - **Neural Network**: Good for large datasets, supports multi-target.
             """)
         
-        models_to_train = st.multiselect("Select Models", [
-            "Logistic Regression", "Random Forest", "Decision Tree",
-            "SVM", "Gradient Boosting", "Neural Network"
-        ], default=["Logistic Regression", "Random Forest"], key="model_select")
+        model_options = ["Logistic Regression", "Random Forest", "Decision Tree", "SVM", "Gradient Boosting", "Neural Network"]
+        models_to_train = st.multiselect("Select Models", model_options, default=["Random Forest"])
+        
+        # Model recommendation
+        recommended_model = "Random Forest" if len(targets) > 1 else "Logistic Regression"
+        st.info(f"Recommended Model: {recommended_model} (based on {'multi-target' if len(targets) > 1 else 'single-target'} learning)")
+        model_available = recommended_model in st.session_state.models
         
         enable_tuning = st.checkbox("Enable Hyperparameter Tuning", value=False)
         tuning_params = {}
@@ -348,43 +311,21 @@ elif st.session_state.page == "🤖 Model Training":
                 st.write(f"**{model_name} Parameters**")
                 if model_name == "Logistic Regression":
                     tuning_params[model_name] = {
-                        "C": st.multiselect(f"C values ({model_name})", [0.1, 1, 10], default=[0.1, 1, 10]),
-                        "solver": st.multiselect(f"Solver ({model_name})", ["lbfgs", "liblinear"], default=["lbfgs", "liblinear"])
+                        "estimator__C": st.multiselect(f"C values ({model_name})", [0.1, 1, 10], default=[0.1, 1, 10]),
+                        "estimator__solver": st.multiselect(f"Solver ({model_name})", ["lbfgs", "liblinear"], default=["lbfgs", "liblinear"])
                     }
                 elif model_name == "Random Forest":
                     tuning_params[model_name] = {
-                        "n_estimators": st.multiselect(f"N Estimators ({model_name})", [100, 200], default=[100, 200]),
-                        "max_depth": st.multiselect(f"Max Depth ({model_name})", [None, 10, 20], default=[None, 10, 20]),
-                        "min_samples_split": st.multiselect(f"Min Samples Split ({model_name})", [2, 5], default=[2, 5])
+                        "estimator__n_estimators": st.multiselect(f"N Estimators ({model_name})", [100, 200], default=[100, 200]),
+                        "estimator__max_depth": st.multiselect(f"Max Depth ({model_name})", [None, 10, 20], default=[None, 10, 20])
                     }
-                elif model_name == "Decision Tree":
-                    tuning_params[model_name] = {
-                        "max_depth": st.multiselect(f"Max Depth ({model_name})", [None, 10, 20], default=[None, 10, 20]),
-                        "min_samples_split": st.multiselect(f"Min Samples Split ({model_name})", [2, 5], default=[2, 5])
-                    }
-                elif model_name == "SVM":
-                    tuning_params[model_name] = {
-                        "C": st.multiselect(f"C values ({model_name})", [0.1, 1, 10], default=[0.1, 1, 10]),
-                        "kernel": st.multiselect(f"Kernel ({model_name})", ["rbf", "linear"], default=["rbf", "linear"])
-                    }
-                elif model_name == "Gradient Boosting":
-                    tuning_params[model_name] = {
-                        "n_estimators": st.multiselect(f"N Estimators ({model_name})", [100, 200], default=[100, 200]),
-                        "learning_rate": st.multiselect(f"Learning Rate ({model_name})", [0.01, 0.1], default=[0.01, 0.1]),
-                        "max_depth": st.multiselect(f"Max Depth ({model_name})", [3, 5], default=[3, 5])
-                    }
-                elif model_name == "Neural Network":
-                    tuning_params[model_name] = {
-                        "hidden_layer_sizes": st.multiselect(f"Hidden Layer Sizes ({model_name})", [(50,), (100,), (50, 50)], default=[(50,), (100,)]),
-                        "alpha": st.multiselect(f"Alpha ({model_name})", [0.0001, 0.001], default=[0.0001, 0.001]),
-                        "learning_rate": st.multiselect(f"Learning Rate ({model_name})", ["constant", "adaptive"], default=["constant", "adaptive"])
-                    }
+                # Add other models as needed
         
         if st.button("Train Models"):
             try:
                 with st.spinner("Training models..."):
-                    X = st.session_state.data[features]
-                    y = st.session_state.data[target]
+                    X = data[features]
+                    y = data[targets]
                     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
                     
                     preprocessor = ColumnTransformer(
@@ -399,190 +340,76 @@ elif st.session_state.page == "🤖 Model Training":
                     
                     feature_names = numerical_cols + list(preprocessor.named_transformers_["cat"].get_feature_names_out(categorical_cols))
                     
-                    st.subheader("Training Status")
-                    status_container = st.empty()
-                    
                     st.session_state.models = {}
-                    comparison_data = []
-                    st.session_state.patterns = []
                     for model_name in models_to_train:
-                        try:
-                            status_container.write(f"Training {model_name}...")
-                            if enable_tuning and model_name in tuning_params:
-                                model, metrics, best_params = tune_model(model_name, X_train_processed, y_train, X_test_processed, y_test, tuning_params[model_name])
-                            else:
-                                model, metrics = train_model(model_name, X_train_processed, y_train, X_test_processed, y_test)
-                                best_params = None
-                            
-                            version_id = str(uuid.uuid4())
-                            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            st.session_state.model_versions.setdefault(model_name, []).append({
-                                "version_id": version_id,
-                                "timestamp": timestamp,
-                                "metrics": metrics,
-                                "best_params": best_params,
-                                "model": model,
-                                "preprocessor": preprocessor,
-                                "feature_names": feature_names,
-                                "y_test": y_test,
-                                "y_pred": metrics["y_pred"],
-                                "X_test_processed": X_test_processed
-                            })
-                            
-                            st.session_state.models[model_name] = {
-                                "model": model,
-                                "metrics": metrics,
-                                "preprocessor": preprocessor,
-                                "feature_names": feature_names,
-                                "best_params": best_params,
-                                "y_test": y_test,
-                                "y_pred": metrics["y_pred"],
-                                "X_test_processed": X_test_processed
+                        status = st.empty()
+                        status.write(f"Training {model_name}...")
+                        model = MultiOutputClassifier(train_model(model_name, None, None, None, None)[0]) if len(targets) > 1 else train_model(model_name, None, None, None, None)[0]
+                        pipeline = Pipeline([("preprocessor", preprocessor), ("estimator", model)])
+                        pipeline.fit(X_train, y_train)
+                        
+                        y_pred = pipeline.predict(X_test)
+                        metrics = {}
+                        for i, target in enumerate(targets):
+                            metrics[target] = {
+                                "accuracy": accuracy_score(y_test[target], y_pred[:, i] if len(targets) > 1 else y_pred),
+                                "precision": precision_score(y_test[target], y_pred[:, i] if len(targets) > 1 else y_pred, pos_label="CA" if target == "CA_Status" else "Y"),
+                                "recall": recall_score(y_test[target], y_pred[:, i] if len(targets) > 1 else y_pred, pos_label="CA" if target == "CA_Status" else "Y"),
+                                "f1": f1_score(y_test[target], y_pred[:, i] if len(targets) > 1 else y_pred, pos_label="CA" if target == "CA_Status" else "Y"),
                             }
-                            
-                            comparison_data.append({
-                                "Model": model_name,
-                                "Version": version_id,
-                                "Timestamp": timestamp,
-                                "Accuracy": metrics['accuracy'],
-                                "Precision": metrics['precision'],
-                                "Recall": metrics['recall'],
-                                "F1 Score": metrics['f1'],
-                                "ROC AUC": metrics['roc_auc']
-                            })
-                            
-                            status_container.success(f"{model_name} trained successfully!")
-                        except Exception as e:
-                            status_container.error(f"Error training {model_name}: {str(e)}")
-                    
-                    high_risk = st.session_state.data[st.session_state.data["CA_Status"] == "CA"]
-                    if not high_risk.empty:
-                        patterns = []
-                        low_attendance = f"Average Attendance: {high_risk['Attendance_Percentage'].mean():.2f}%"
-                        common_grades = f"Common Grades: {', '.join(map(str, high_risk['Grade'].mode().tolist()))}"
-                        common_meal_codes = f"Common Meal Codes: {', '.join(high_risk['Meal_Code'].mode().tolist())}"
-                        common_transport = f"Common Transportation: {', '.join(high_risk['Transportation'].mode().tolist())}"
                         
-                        existing_patterns = [p["pattern"] for p in st.session_state.patterns]
-                        for pattern in [low_attendance, common_grades, common_meal_codes, common_transport]:
-                            if pattern not in existing_patterns:
-                                patterns.append({"pattern": pattern, "explanation": "Identified in high-risk students (CA Status = CA)"})
-                        
-                        st.session_state.patterns.extend(patterns)
+                        version_id = str(uuid.uuid4())
+                        st.session_state.model_versions.setdefault(model_name, []).append({
+                            "version_id": version_id,
+                            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "metrics": metrics,
+                            "model": pipeline,
+                            "feature_names": feature_names
+                        })
+                        st.session_state.models[model_name] = {"model": pipeline, "metrics": metrics, "feature_names": feature_names}
+                        status.success(f"{model_name} trained successfully!")
                     
                     st.success("All models trained successfully!")
-                    st.balloons()
             except Exception as e:
-                st.error(f"Error processing data: {str(e)}")
+                st.error(f"Error training models: {str(e)}")
         
         if st.session_state.models:
             st.subheader("Model Results")
-            for model_name in models_to_train:
-                if model_name in st.session_state.models:
-                    model_info = st.session_state.models[model_name]
-                    metrics = model_info["metrics"]
-                    
-                    st.write(f"**{model_name} Results**")
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.markdown(f"""
-                        <div class="model-icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3498db"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>
-                            {model_name}
-                        </div>
-                        """, unsafe_allow_html=True)
-                        st.write(f"Accuracy: {metrics['accuracy']:.2f}")
-                        st.write(f"Precision: {metrics['precision']:.2f}")
-                        st.write(f"Recall: {metrics['recall']:.2f}")
-                        st.write(f"F1 Score: {metrics['f1']:.2f}")
-                        st.write(f"ROC AUC: {metrics['roc_auc']:.2f}")
-                        if model_info["best_params"]:
-                            st.write("Best Parameters:")
-                            st.json(model_info["best_params"])
-                    with col2:
-                        fig = plot_confusion_matrix(model_info["y_test"], model_info["y_pred"])
-                        st.plotly_chart(fig)
-                    
-                    if model_name in ["Random Forest", "Decision Tree", "Gradient Boosting"]:
-                        fig = plot_feature_importance(model_info["model"], model_info["feature_names"])
-                        if fig:
-                            st.plotly_chart(fig)
-                    
-                    st.write(get_model_explanation(model_name, model_info["X_test_processed"][:1], model_info["model"]))
+            for model_name, info in st.session_state.models.items():
+                st.write(f"**{model_name}**")
+                for target, metrics in info["metrics"].items():
+                    st.write(f"Target: {target}")
+                    st.write(f"Accuracy: {metrics['accuracy']:.2f}, Precision: {metrics['precision']:.2f}, Recall: {metrics['recall']:.2f}, F1: {metrics['f1']:.2f}")
         
-        st.subheader("Model Selection & Versioning Dashboard")
-        if st.session_state.model_versions:
-            version_data = []
-            for model_name, versions in st.session_state.model_versions.items():
-                for version in versions:
-                    version_data.append({
-                        "Model": model_name,
-                        "Version ID": version["version_id"],
-                        "Timestamp": version["timestamp"],
-                        "Accuracy": version["metrics"]["accuracy"],
-                        "Precision": version["metrics"]["precision"],
-                        "Recall": version["metrics"]["recall"],
-                        "F1 Score": version["metrics"]["f1"],
-                        "ROC AUC": version["metrics"]["roc_auc"]
-                    })
-            version_df = pd.DataFrame(version_data)
-            st.dataframe(version_df)
+        st.subheader("Pattern Discovery")
+        with st.expander("Add New Pattern", expanded=False):
+            st.markdown("""
+            **How to Add a New Pattern**
+
+            Patterns identify characteristics of high-risk students (e.g., low attendance in specific grades).  
+            **Steps to Write a Pattern**:
+            1. **Analyze Data**: Review datasets for trends (e.g., low `Attendance_Percentage` in Grade 9).
+               - Use dataset previews or visualizations to identify patterns.
+               - Example: If Grade 9 students have `Attendance_Percentage < 80%`, note this trend.
+            2. **Define Pattern**: Write a concise description (e.g., "Low attendance in Grade 9").
+            3. **Add Explanation**: Explain why this pattern indicates risk (e.g., "Low attendance correlates with CA status").
+            4. **Submit**: Enter below and click "Add Pattern".
             
-            with st.form("compare_form"):
-                st.write("Compare Model Versions")
-                compare_models = st.multiselect(
-                    "Select Models to Compare",
-                    list(st.session_state.model_versions.keys()),
-                    default=st.session_state.compare_models,
-                    key="compare_models_select"
-                )
-                if st.form_submit_button("Compare"):
-                    st.session_state.compare_models = compare_models
-                    if compare_models:
-                        compare_data = []
-                        for model_name in compare_models:
-                            for version in st.session_state.model_versions[model_name]:
-                                compare_data.append({
-                                    "Model": f"{model_name} ({version['version_id'][:8]})",
-                                    "Accuracy": version["metrics"]["accuracy"],
-                                    "Precision": version["metrics"]["precision"],
-                                    "Recall": version["metrics"]["recall"],
-                                    "F1 Score": version["metrics"]["f1"],
-                                    "ROC AUC": version["metrics"]["roc_auc"]
-                                })
-                        if compare_data:
-                            compare_df = pd.DataFrame(compare_data)
-                            fig = go.Figure()
-                            for metric in ["Accuracy", "Precision", "Recall", "F1 Score", "ROC AUC"]:
-                                fig.add_trace(go.Bar(
-                                    x=compare_df["Model"],
-                                    y=compare_df[metric],
-                                    name=metric,
-                                    hovertemplate=f"{metric}: %{{y:.2f}}"
-                                ))
-                            fig.update_layout(
-                                title="Model Version Comparison",
-                                barmode="group",
-                                xaxis_title="Model (Version)",
-                                yaxis_title="Score",
-                                width=600,
-                                height=400,
-                                margin=dict(l=50, r=50, t=50, b=50)
-                            )
-                            st.plotly_chart(fig, use_container_width=False)
-                    else:
-                        st.warning("Please select at least one model to compare.")
+            **Example**:
+            - Pattern: "High suspensions in Grade 10"
+            - Explanation: "Students with >2 suspensions in Grade 10 are more likely to be chronically absent."
+            """)
+            new_pattern = st.text_input("New Pattern")
+            pattern_explanation = st.text_input("Pattern Explanation")
+            if st.button("Add Pattern"):
+                if new_pattern and pattern_explanation:
+                    st.session_state.patterns.append({"pattern": new_pattern, "explanation": pattern_explanation})
+                    st.success("Pattern added!")
         
-        if st.session_state.models:
-            st.subheader("Pattern Discovery")
-            st.write(f"Number of patterns learned: {len(st.session_state.patterns)}")
-            if st.session_state.patterns:
-                for pattern in st.session_state.patterns:
-                    st.write(f"- {pattern['pattern']}: {pattern['explanation']}")
-            else:
-                st.info("No patterns identified yet.")
-        else:
-            st.info("Train models to enable pattern discovery.")
+        if st.session_state.patterns:
+            st.write("**Learned Patterns**")
+            for p in st.session_state.patterns:
+                st.write(f"- {p['pattern']}: {p['explanation']}")
 
 # Page 3: Results
 elif st.session_state.page == "📊 Results":
@@ -603,90 +430,44 @@ elif st.session_state.page == "📊 Results":
         school_prefix = st.text_input("School Prefix (e.g., CU)", "CU")
         num_schools = st.number_input("Number of Schools", 1, 10, 3)
         id_length = st.radio("Student ID Length", [5, 7], index=0)
-        dropoff_percent = st.slider("Target CA Percentage (%)", 5, 50, 20, step=5, help="Percentage of students with CA Status = CA")
+        dropoff_percent = st.slider("Target CA Percentage (%)", 5, 50, 20, step=5)
         
-        grades = st.multiselect("Grades", list(range(1, 13)), default=[1, 2, 3, 4, 5], key="current_grades")
+        grades = st.multiselect("Grades", list(range(1, 13)), default=[1, 2, 3, 4, 5])
         
-        st.subheader("Gender Distribution (%)")
         male_dist = st.slider("Male (%)", 0, 100, 40, step=5, key="current_male")
         female_dist = st.slider("Female (%)", 0, 100, 40, step=5, key="current_female")
         other_dist = st.slider("Other (%)", 0, 100, 20, step=5, key="current_other")
         
-        total_dist = male_dist + female_dist + other_dist
-        if total_dist != 100:
-            st.error(f"Gender distribution must sum to 100%. Current total: {total_dist}%")
-            gender_dist = None
-        else:
-            gender_dist = [male_dist, female_dist, other_dist]
+        gender_dist = [male_dist, female_dist, other_dist] if male_dist + female_dist + other_dist == 100 else None
         
         meal_codes = st.multiselect("Meal Codes", ["Free", "Reduced", "Paid"], default=["Free", "Reduced", "Paid"], key="current_meal")
         academic_perf = st.slider("Academic Performance Range (%)", 1, 100, (40, 90), key="current_academic")
-        if academic_perf[0] >= academic_perf[1]:
-            st.error("Academic Performance Range: Minimum must be less than maximum.")
-            academic_perf_valid = False
-        else:
-            academic_perf_valid = True
+        academic_perf_valid = academic_perf[0] < academic_perf[1]
         
         transportation = st.multiselect("Transportation Options", ["Bus", "Walk", "Car"], default=["Bus", "Walk"], key="current_transport")
         suspensions_range = st.slider("Suspensions Range (per year)", 0, 10, (0, 3), key="current_suspensions")
-        if suspensions_range[0] >= suspensions_range[1]:
-            st.error("Suspensions Range: Minimum must be less than maximum.")
-            suspensions_valid = False
-        else:
-            suspensions_valid = True
+        suspensions_valid = suspensions_range[0] <= suspensions_range[1]
         
-        st.subheader("Attendance Data")
         total_days = 180
-        st.write(f"Total School Days: {total_days}")
         present_days_range = st.slider("Present Days Range", 0, total_days, (100, 180), key="current_present")
-        if present_days_range[0] >= present_days_range[1]:
-            st.error("Present Days Range: Minimum must be less than maximum.")
-            present_days_valid = False
-        else:
-            present_days_valid = True
+        present_days_valid = present_days_range[0] < present_days_range[1]
         
         max_absent_days = total_days - present_days_range[0]
         if max_absent_days <= 0:
-            st.error(f"Error: Minimum present days ({present_days_range[0]}) equals or exceeds total days ({total_days}).")
             max_absent_days = 1
         absent_days_range = st.slider(
-            "Absent Days Range",
-            0,
-            max_absent_days,
-            (0, min(80, max_absent_days)),
-            key="current_absent",
-            help=f"Maximum absent days cannot exceed {max_absent_days}."
+            "Absent Days Range", 0, max_absent_days, (0, min(80, max_absent_days)), key="current_absent"
         )
-        if absent_days_range[0] >= absent_days_range[1]:
-            st.error("Absent Days Range: Minimum must be less than maximum.")
-            absent_days_valid = False
-        else:
-            absent_days_valid = True
+        absent_days_valid = absent_days_range[0] <= absent_days_range[1]
         
-        attendance_valid = True
-        if max_absent_days <= 0:
-            st.error(f"Error: Minimum present days ({present_days_range[0]}) equals or exceeds total days ({total_days}).")
-            attendance_valid = False
-        elif present_days_range[0] >= present_days_range[1]:
-            st.error(f"Error: Minimum present days ({present_days_range[0]}) must be less than maximum present days ({present_days_range[1]}).")
-            attendance_valid = False
-        elif absent_days_range[0] >= absent_days_range[1]:
-            st.error(f"Error: Minimum absent days ({absent_days_range[0]}) must be less than maximum absent days ({absent_days_range[1]}).")
-            attendance_valid = False
-        elif present_days_range[0] + absent_days_range[1] > total_days:
-            st.error(f"Error: Minimum present days ({present_days_range[0]}) plus maximum absent days ({absent_days_range[1]}) exceeds total days ({total_days}).")
-            attendance_valid = False
-        elif present_days_range[1] + absent_days_range[0] < total_days:
-            st.error(f"Error: Maximum present days ({present_days_range[1]}) plus minimum absent days ({absent_days_range[0]}) is less than total days ({total_days}).")
-            attendance_valid = False
+        attendance_valid = (
+            max_absent_days > 0 and present_days_valid and absent_days_valid and
+            present_days_range[0] + absent_days_range[1] <= total_days and
+            present_days_range[1] + absent_days_range[0] >= total_days
+        )
         
-        use_historical_ids = st.checkbox("Use Historical Student IDs", value=False, disabled=st.session_state.data is None)
-        include_graduates = st.checkbox("Include Graduating Students (Cap at Grade 12)", value=False, disabled=not use_historical_ids)
-        
-        if use_historical_ids and st.session_state.data is not None:
-            unique_historical_students = len(st.session_state.data["Student_ID"].unique())
-            if unique_historical_students > num_students:
-                st.warning(f"Note: Historical data contains {unique_historical_students} unique students, but only {num_students} will be included in current-year data.")
+        use_historical_ids = st.checkbox("Use Historical Student IDs", value=False, disabled=not st.session_state.datasets)
+        include_graduates = st.checkbox("Include Graduating Students", value=False, disabled=not use_historical_ids)
         
         st.subheader("Custom Fields")
         if st.button("Add Custom Field", key="add_current_custom"):
@@ -705,20 +486,9 @@ elif st.session_state.page == "📊 Results":
         
         st.subheader("Drop Off Rules")
         with st.expander("Define Drop Off Rules (Optional)", expanded=False):
-            st.markdown("""
-            Define rules to assign `Drop_Off = 'Y'` for students with `CA_Status = 'CA'`.  
-            - Specify an **Attendance Percentage Range** to filter CA students.  
-            - Select **Features** (e.g., Transportation, Meal Code) and their values to include.  
-            - Only CA students meeting all conditions will have `Drop_Off = 'Y'`; others get `Drop_Off = 'N'`.  
-            - Leave empty to assign `Drop_Off = 'Y'` to all CA students.
-            """)
             attendance_min = st.slider("Attendance Percentage Min (%)", 0, 100, 0, step=5, key="current_attendance_min")
             attendance_max = st.slider("Attendance Percentage Max (%)", 0, 100, 80, step=5, key="current_attendance_max")
-            if attendance_min > attendance_max:
-                st.error("Attendance Percentage Min must be less than or equal to Max.")
-                drop_off_rules_valid = False
-            else:
-                drop_off_rules_valid = True
+            drop_off_rules_valid = attendance_min <= attendance_max
             
             drop_off_features = st.multiselect(
                 "Select Features for Drop Off Rules",
@@ -741,19 +511,16 @@ elif st.session_state.page == "📊 Results":
                     values = st.multiselect(f"Select {feature} Values", schools, default=schools, key=f"current_drop_off_{feature}")
                 else:
                     custom_field = next((f for f in st.session_state.current_custom_fields if f["name"] == feature), None)
-                    if custom_field:
-                        values_list = [v.strip() for v in custom_field["values"].split(",")]
-                        values = st.multiselect(f"Select {feature} Values", values_list, default=values_list, key=f"current_drop_off_{feature}")
-                    else:
-                        values = []
+                    values_list = [v.strip() for v in custom_field["values"].split(",")] if custom_field else []
+                    values = st.multiselect(f"Select {feature} Values", values_list, default=values_list, key=f"current_drop_off_{feature}")
                 if values:
                     drop_off_rules["features"][feature] = values
         
-        generate_disabled = not (gender_dist is not None and attendance_valid and academic_perf_valid and suspensions_valid and present_days_valid and absent_days_valid and drop_off_rules_valid)
+        generate_disabled = not (gender_dist is not None and attendance_valid and academic_perf_valid and suspensions_valid and drop_off_rules_valid)
         if st.button("Generate Current Year Data", disabled=generate_disabled):
             try:
                 custom_fields = [(f["name"], f["values"]) for f in st.session_state.current_custom_fields if f["name"] and f["values"]]
-                historical_data = st.session_state.data if use_historical_ids and st.session_state.data is not None else None
+                historical_data = list(st.session_state.datasets.values())[0] if use_historical_ids and st.session_state.datasets else None
                 st.session_state.current_data = generate_current_year_data(
                     num_students, school_prefix, num_schools, grades, gender_dist,
                     meal_codes, academic_perf, transportation, suspensions_range,
@@ -763,15 +530,9 @@ elif st.session_state.page == "📊 Results":
                 )
                 st.session_state.drop_off_rules = drop_off_rules
                 st.success("Current year data generated successfully!")
-                st.subheader("Data Preview")
                 st.dataframe(st.session_state.current_data.head(10))
                 csv = st.session_state.current_data.to_csv(index=False)
-                st.download_button(
-                    label="Download Current Year Data",
-                    data=csv,
-                    file_name="current_year_data.csv",
-                    mime="text/csv"
-                )
+                st.download_button("Download Current Year Data", csv, "current_year_data.csv", "text/csv")
             except Exception as e:
                 st.error(f"Error generating data: {str(e)}")
     else:
@@ -780,7 +541,6 @@ elif st.session_state.page == "📊 Results":
             try:
                 st.session_state.current_data = pd.read_csv(uploaded_file)
                 st.success("Data uploaded successfully!")
-                st.subheader("Data Preview")
                 st.dataframe(st.session_state.current_data.head(10))
             except Exception as e:
                 st.error(f"Error uploading data: {str(e)}")
@@ -790,48 +550,37 @@ elif st.session_state.page == "📊 Results":
         selected_model = st.selectbox("Select Model", list(st.session_state.models.keys()))
         excluded_columns = ["Student_ID", "CA_Prediction", "CA_Probability", "Drop_Off", "Prediction_Causes"]
         available_features = [col for col in st.session_state.current_data.columns if col not in excluded_columns]
-        feature_toggles = {}
-        st.write("Toggle Features:")
-        for feature in available_features:
-            feature_toggles[feature] = st.checkbox(feature, value=True, key=f"predict_feature_{feature}")
+        feature_toggles = {f: st.checkbox(f, value=True, key=f"predict_feature_{f}") for f in available_features}
         features = [f for f, enabled in feature_toggles.items() if enabled]
         
         group_by_options = [col for col in available_features if st.session_state.current_data[col].dtype == "object" or col == "Grade"]
-        group_by_options += [f["name"] for f in st.session_state.current_custom_fields if f["name"] in st.session_state.current_data.columns]
         group_by_feature = st.selectbox(
-            "Group Drop Off % By",
-            group_by_options,
-            index=group_by_options.index(st.session_state.selected_group_by) if st.session_state.selected_group_by in group_by_options else 0,
-            help="Select a feature to visualize the percentage of students predicted as chronically absent (CA) for each group."
+            "Group Drop Off % By", group_by_options,
+            index=group_by_options.index(st.session_state.selected_group_by) if st.session_state.selected_group_by in group_by_options else 0
         )
         st.session_state.selected_group_by = group_by_feature
         
         if st.button("Predict"):
             try:
                 model_info = st.session_state.models[selected_model]
-                training_features = model_info["feature_names"]
-                missing_features = [f for f in features if f not in st.session_state.current_data.columns]
-                if missing_features:
-                    raise ValueError(f"Selected features not found in current data: {missing_features}")
-                
                 X = st.session_state.current_data[features]
-                X_processed = model_info["preprocessor"].transform(X)
-                predictions = model_info["model"].predict(X_processed)
-                probabilities = model_info["model"].predict_proba(X_processed)[:, 1]
-                
+                predictions = model_info["model"].predict(X)
                 prediction_data = st.session_state.current_data.copy()
-                prediction_data["CA_Prediction"] = predictions
-                prediction_data["CA_Probability"] = probabilities
                 
-                # Apply Drop Off rules to predictions
+                if isinstance(predictions, np.ndarray) and predictions.shape[1] > 1:
+                    for i, target in enumerate(model_info["metrics"].keys()):
+                        prediction_data[f"{target}_Prediction"] = predictions[:, i]
+                        prediction_data[f"{target}_Probability"] = model_info["model"].predict_proba(X)[:, 1]
+                else:
+                    prediction_data["CA_Prediction"] = predictions
+                    prediction_data["CA_Probability"] = model_info["model"].predict_proba(X)[:, 1]
+                
                 def apply_prediction_drop_off_rules(row):
-                    if row["CA_Prediction"] != "CA":
+                    if row.get("CA_Prediction", "Non-CA") != "CA":
                         return "N"
                     attendance = row["Attendance_Percentage"]
                     rules = st.session_state.drop_off_rules
-                    attendance_min = rules.get("attendance_min", 0)
-                    attendance_max = rules.get("attendance_max", 100)
-                    if not (attendance_min <= attendance <= attendance_max):
+                    if not (rules.get("attendance_min", 0) <= attendance <= rules.get("attendance_max", 100)):
                         return "N"
                     for feature, values in rules.get("features", {}).items():
                         if feature in row and row[feature] not in values:
@@ -840,10 +589,9 @@ elif st.session_state.page == "📊 Results":
                 
                 prediction_data["Drop_Off"] = prediction_data.apply(apply_prediction_drop_off_rules, axis=1)
                 
-                # Identify prediction causes based on patterns
                 def identify_causes(row):
                     causes = []
-                    if row["CA_Prediction"] == "CA":
+                    if row.get("CA_Prediction", "Non-CA") == "CA":
                         for pattern in st.session_state.patterns:
                             pattern_text = pattern["pattern"].lower()
                             if "attendance" in pattern_text and row["Attendance_Percentage"] < (st.session_state.high_risk_baselines["Attendance_Percentage"] if st.session_state.high_risk_baselines else 80):
@@ -858,8 +606,7 @@ elif st.session_state.page == "📊 Results":
                 
                 prediction_data["Prediction_Causes"] = prediction_data.apply(identify_causes, axis=1)
                 
-                # Calculate Drop Off % for the selected group
-                if group_by_feature and "CA_Prediction" in prediction_data.columns:
+                if group_by_feature:
                     try:
                         dropoff_data = prediction_data.groupby(group_by_feature)["CA_Prediction"].value_counts(normalize=True).unstack().fillna(0)
                         if "CA" in dropoff_data.columns:
@@ -867,82 +614,169 @@ elif st.session_state.page == "📊 Results":
                             dropoff_data = dropoff_data[["Drop_Off_Percent"]].reset_index()
                             prediction_data = prediction_data.merge(
                                 dropoff_data[[group_by_feature, "Drop_Off_Percent"]],
-                                on=group_by_feature,
-                                how="left"
+                                on=group_by_feature, how="left"
                             )
                         else:
                             prediction_data["Drop_Off_Percent"] = 0.0
                     except Exception as e:
-                        st.warning(f"Error calculating Drop Off % for {group_by_feature}: {str(e)}")
+                        st.warning(f"Error calculating Drop Off %: {str(e)}")
                         prediction_data["Drop_Off_Percent"] = 0.0
                 
-                if use_historical_ids and "Student_ID" in prediction_data.columns and st.session_state.data is not None:
-                    if "Student_ID" not in st.session_state.data.columns:
-                        raise ValueError("Student_ID column missing in historical data")
-                    historical_data = st.session_state.data[["Student_ID", "Year", "Grade", "Attendance_Percentage", "Academic_Performance", "Suspensions"]]
-                    prediction_data = prediction_data.merge(
-                        historical_data, on="Student_ID", how="left", suffixes=("", "_Historical")
-                    )
-                
                 st.session_state.current_data = prediction_data
-                
                 st.subheader("Prediction Results")
-                st.dataframe(st.session_state.current_data)
+                st.dataframe(prediction_data)
                 
-                heatmap_data = st.session_state.current_data.groupby(["Grade", "School"])["CA_Probability"].mean().unstack().fillna(0)
-                fig = px.imshow(
-                    heatmap_data,
-                    title="CA Probability Heatmap by Grade and School (High Risk in Red)",
-                    labels={"color": "CA Probability"},
-                    color_continuous_scale="Reds"
-                )
-                fig.update_traces(hovertemplate="Grade: %{y}<br>School: %{x}<br>CA Probability: %{z:.2f}")
-                st.plotly_chart(fig)
-                
-                fig = px.histogram(
-                    st.session_state.current_data,
-                    x="CA_Probability",
-                    color="CA_Prediction",
-                    title="CA Probability Distribution",
-                    hover_data=["CA_Probability", "CA_Prediction"]
-                )
-                fig.update_traces(hovertemplate="Probability: %{x:.2f}<br>Prediction: %{customdata[1]}<br>Count: %{y}")
-                st.plotly_chart(fig)
-                
-                heatmap_data = st.session_state.current_data.groupby(["Grade", "CA_Prediction"]).size().unstack().fillna(0)
-                fig = px.imshow(
-                    heatmap_data,
-                    title="CA Prediction Heatmap by Grade",
-                    labels={"color": "Count"}
-                )
-                fig.update_traces(hovertemplate="Grade: %{y}<br>Prediction: %{x}<br>Count: %{z}")
-                st.plotly_chart(fig)
-                
-                if group_by_feature and "Drop_Off_Percent" in st.session_state.current_data.columns:
-                    dropoff_data = st.session_state.current_data.groupby(group_by_feature)["CA_Prediction"].value_counts(normalize=True).unstack().fillna(0)
-                    if "CA" in dropoff_data.columns:
-                        dropoff_data["Drop_Off_Percent"] = dropoff_data["CA"] * 100
-                        dropoff_data = dropoff_data[["Drop_Off_Percent"]].reset_index()
-                        fig = px.pie(
-                            dropoff_data,
-                            values="Drop_Off_Percent",
-                            names=group_by_feature,
-                            title=f"Drop Off Percentage by {group_by_feature}",
-                            hole=0.4,
-                            color_discrete_sequence=px.colors.sequential.Reds
-                        )
-                        fig.update_traces(
-                            hovertemplate=f"{group_by_feature}: %{{label}}<br>Drop Off %: %{{value:.2f}}%",
-                            textinfo="percent+label"
-                        )
-                        st.plotly_chart(fig)
-                    else:
-                        st.warning(f"No students predicted as CA for grouping by {group_by_feature}.")
-                
-                csv = st.session_state.current_data.to_csv(index=False)
+                csv = prediction_data.to_csv(index=False)
                 st.download_button("Download Predictions", csv, "predictions.csv", "text/csv")
             except Exception as e:
                 st.error(f"Error running predictions: {str(e)}")
+        
+        st.subheader("Group Analysis")
+        with st.expander("Understanding Group Analysis & Comparisons", expanded=False):
+            st.markdown("""
+            **Group Analysis & Comparisons**
+
+            Group analysis aggregates data by a selected feature (e.g., Grade, School) to show:
+            - **Drop Off Percentage**: Proportion of students predicted as chronically absent (CA) per group.
+            - **Insights**: Identify high-risk groups (e.g., Grade 9 with high CA rates) for targeted interventions.
+            
+            **What Users Can Know**:
+            - Which grades or schools have the highest CA risk.
+            - Patterns in demographic or behavioral features (e.g., transportation type) linked to absenteeism.
+            - Trends to prioritize resources (e.g., focus on schools with >20% CA rate).
+            
+            Use the "Group Drop Off % By" dropdown to select a feature and visualize results in the pie chart.
+            """)
+        
+        if "CA_Prediction" in st.session_state.current_data.columns:
+            dropoff_data = st.session_state.current_data.groupby(group_by_feature)["CA_Prediction"].value_counts(normalize=True).unstack().fillna(0)
+            if "CA" in dropoff_data.columns:
+                dropoff_data["Drop_Off_Percent"] = dropoff_data["CA"] * 100
+                dropoff_data = dropoff_data[["Drop_Off_Percent"]].reset_index()
+                fig = px.pie(
+                    dropoff_data, values="Drop_Off_Percent", names=group_by_feature,
+                    title=f"Drop Off Percentage by {group_by_feature}", hole=0.4, color_discrete_sequence=px.colors.sequential.Reds
+                )
+                fig.update_traces(
+                    hovertemplate=f"{group_by_feature}: %{{label}}<br>Drop Off %: %{{value:.2f}}%",
+                    textinfo="percent+label"
+                )
+                st.plotly_chart(fig)
+        
+        st.subheader("Visualizations")
+        with st.expander("Understanding Visualizations", expanded=False):
+            st.markdown("""
+            **Visualization Explanations**
+
+            - **CA Probability Heatmap by Grade and School**:
+              - **Purpose**: Shows average CA probability across grades and schools.
+              - **Insight**: Identify high-risk grades/schools (red indicates higher risk).
+              - **Hover**: Displays Grade, School, and CA Probability.
+            
+            - **CA Probability Distribution**:
+              - **Purpose**: Histogram of CA probabilities, colored by CA prediction.
+              - **Insight**: Understand the spread of risk levels and prediction confidence.
+              - **Hover**: Shows probability, prediction, and count.
+            
+            - **CA Prediction Heatmap by Grade**:
+              - **Purpose**: Counts students by grade and CA prediction.
+              - **Insight**: See which grades have more CA predictions.
+              - **Hover**: Displays Grade, Prediction, and Count.
+            
+            - **Drop Off Percentage Pie Chart**:
+              - **Purpose**: Shows proportion of CA predictions by a selected feature.
+              - **Insight**: Identify high-risk groups for intervention.
+              - **Hover**: Shows feature value and Drop Off %.
+            
+            - **Bubble Plot**:
+              - **Purpose**: Visualizes students by Attendance Percentage, CA Probability, Suspensions (size), and CA Prediction (color).
+              - **Insight**: Spot patterns in high-risk students (e.g., low attendance, high suspensions).
+              - **Hover**: Shows Student ID, Attendance, CA Probability, Suspensions, and Prediction.
+            
+            - **Dataset Comparison Heatmap**:
+              - **Purpose**: Compares CA Probability across multiple datasets by Grade and School.
+              - **Insight**: Identify trends or differences across datasets (e.g., higher risk in newer data).
+              - **Hover**: Shows Dataset, Grade, School, and Normalized CA Probability.
+            """)
+        
+        if "CA_Probability" in st.session_state.current_data.columns:
+            heatmap_data = st.session_state.current_data.groupby(["Grade", "School"])["CA_Probability"].mean().unstack().fillna(0)
+            fig = px.imshow(
+                heatmap_data, title="CA Probability Heatmap by Grade and School",
+                labels={"color": "CA Probability"}, color_continuous_scale="Reds"
+            )
+            fig.update_traces(hovertemplate="Grade: %{y}<br>School: %{x}<br>CA Probability: %{z:.2f}")
+            st.plotly_chart(fig)
+            
+            fig = px.histogram(
+                st.session_state.current_data, x="CA_Probability", color="CA_Prediction",
+                title="CA Probability Distribution", hover_data=["CA_Probability", "CA_Prediction"]
+            )
+            fig.update_traces(hovertemplate="Probability: %{x:.2f}<br>Prediction: %{customdata[1]}<br>Count: %{y}")
+            st.plotly_chart(fig)
+            
+            heatmap_data = st.session_state.current_data.groupby(["Grade", "CA_Prediction"]).size().unstack().fillna(0)
+            fig = px.imshow(
+                heatmap_data, title="CA Prediction Heatmap by Grade",
+                labels={"color": "Count"}
+            )
+            fig.update_traces(hovertemplate="Grade: %{y}<br>Prediction: %{x}<br>Count: %{z}")
+            st.plotly_chart(fig)
+        
+        st.subheader("Bubble Plot")
+        dataset_filter = st.multiselect("Filter by Dataset", list(st.session_state.datasets.keys()), default=[])
+        if "CA_Probability" in st.session_state.current_data.columns:
+            filtered_data = st.session_state.current_data
+            if dataset_filter and use_historical_ids:
+                filtered_data = filtered_data[filtered_data["Student_ID"].isin(
+                    pd.concat([st.session_state.datasets[ds] for ds in dataset_filter])["Student_ID"].unique()
+                )]
+            
+            st.dataframe(filtered_data)
+            
+            fig = px.scatter(
+                filtered_data,
+                x="Attendance_Percentage",
+                y="CA_Probability",
+                size="Suspensions",
+                color="CA_Prediction",
+                hover_data=["Student_ID", "Attendance_Percentage", "CA_Probability", "Suspensions", "CA_Prediction"],
+                title="Bubble Plot: Student Risk Profile",
+                color_discrete_map={"CA": "red", "Non-CA": "blue"}
+            )
+            fig.update_traces(
+                hovertemplate="Student ID: %{customdata[0]}<br>Attendance: %{x:.2f}%<br>CA Probability: %{y:.2f}<br>Suspensions: %{customdata[3]}<br>Prediction: %{customdata[4]}"
+            )
+            st.plotly_chart(fig)
+        
+        st.subheader("Dataset Comparison Heatmap")
+        if st.session_state.datasets and "CA_Probability" in st.session_state.current_data.columns:
+            selected_datasets = st.multiselect("Select Datasets to Compare", list(st.session_state.datasets.keys()), default=list(st.session_state.datasets.keys()))
+            filter_grades = st.multiselect("Filter Grades", sorted(st.session_state.current_data["Grade"].unique()), default=[])
+            filter_schools = st.multiselect("Filter Schools", sorted(st.session_state.current_data["School"].unique()), default=[])
+            
+            if selected_datasets:
+                heatmap_data = []
+                for ds_name in selected_datasets:
+                    ds_data = st.session_state.datasets[ds_name].copy()
+                    ds_data["CA_Probability"] = st.session_state.current_data["CA_Probability"] if ds_name in selected_datasets else ds_data.get("CA_Probability", 0)
+                    ds_data["Dataset"] = ds_name
+                    heatmap_data.append(ds_data)
+                
+                heatmap_df = pd.concat(heatmap_data)
+                if filter_grades:
+                    heatmap_df = heatmap_df[heatmap_df["Grade"].isin(filter_grades)]
+                if filter_schools:
+                    heatmap_df = heatmap_df[heatmap_df["School"].isin(filter_schools)]
+                
+                heatmap_df["CA_Probability"] = (heatmap_df["CA_Probability"] - heatmap_df["CA_Probability"].min()) / (heatmap_df["CA_Probability"].max() - heatmap_df["CA_Probability"].min() + 1e-6)
+                
+                pivot = heatmap_df.groupby(["Grade", "School", "Dataset"])["CA_Probability"].mean().unstack().fillna(0)
+                fig = px.imshow(
+                    pivot, title="Dataset Comparison: Normalized CA Probability",
+                    labels={"color": "Normalized CA Probability"}, color_continuous_scale="Reds"
+                )
+                fig.update_traces(hovertemplate="Grade: %{y}<br>School: %{x}<br>Dataset: %{zaxis}<br>CA Probability: %{z:.2f}")
         
         st.subheader("Single Student Analysis")
         if "CA_Prediction" in st.session_state.current_data.columns:
