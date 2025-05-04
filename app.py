@@ -231,28 +231,28 @@ elif st.session_state.page == "🤖 Model Training":
             numerical_cols = [col for col in features if col not in categorical_cols]
         
         with st.expander("Model Selection"):
-            with st.expander("Model Selection Guide", expanded=False):
-                st.markdown("""
-                **Model Selection Guide**
+            st.subheader("Model Selection Guide")
+            st.markdown("""
+            **Model Selection Guide**
 
-                Choose machine learning models to predict chronic absenteeism. Each model has unique strengths:
+            Choose machine learning models to predict chronic absenteeism. Each model has unique strengths:
 
-                - **Logistic Regression**: Models the probability of absenteeism using a linear relationship. Best for interpretable results.
-                  - [Learn More](https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression)
-                - **Random Forest**: Combines multiple decision trees to improve accuracy and handle complex patterns. Robust to overfitting.
-                  - [Learn More](https://scikit-learn.org/stable/modules/ensemble.html#random-forests)
-                - **Decision Tree**: Splits data into branches based on feature values. Easy to interpret but may overfit.
-                  - [Learn More](https://scikit-learn.org/stable/modules/tree.html)
-                - **SVM**: Finds the optimal boundary to separate classes. Effective for non-linear data.
-                  - [Learn More](https://scikit-learn.org/stable/modules/svm.html)
-                - **Gradient Boosting**: Builds trees sequentially to correct errors. Powerful for predictive accuracy.
-                  - [Learn More](https://scikit-learn.org/stable/modules/ensemble.html#gradient-boosting)
-                - **Neural Network**: Models complex relationships with layered nodes. Suitable for large datasets but requires tuning.
-                  - [Learn More](https://scikit-learn.org/stable/modules/neural_networks_supervised.html)
+            - **Logistic Regression**: Models the probability of absenteeism using a linear relationship. Best for interpretable results.
+              - [Learn More](https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression)
+            - **Random Forest**: Combines multiple decision trees to improve accuracy and handle complex patterns. Robust to overfitting.
+              - [Learn More](https://scikit-learn.org/stable/modules/ensemble.html#random-forests)
+            - **Decision Tree**: Splits data into branches based on feature values. Easy to interpret but may overfit.
+              - [Learn More](https://scikit-learn.org/stable/modules/tree.html)
+            - **SVM**: Finds the optimal boundary to separate classes. Effective for non-linear data.
+              - [Learn More](https://scikit-learn.org/stable/modules/svm.html)
+            - **Gradient Boosting**: Builds trees sequentially to correct errors. Powerful for predictive accuracy.
+              - [Learn More](https://scikit-learn.org/stable/modules/ensemble.html#gradient-boosting)
+            - **Neural Network**: Models complex relationships with layered nodes. Suitable for large datasets but requires tuning.
+              - [Learn More](https://scikit-learn.org/stable/modules/neural_networks_supervised.html)
 
-                Select multiple models to compare their performance. Use hyperparameter tuning for optimized results.
-                For a deeper dive, read [this guide on machine learning models](https://towardsdatascience.com/the-7-most-common-machine-learning-models-8e8d6c0e1c5c).
-                """)
+            Select multiple models to compare their performance. Use hyperparameter tuning for optimized results.
+            For a deeper dive, read [this guide on machine learning models](https://towardsdatascience.com/the-7-most-common-machine-learning-models-8e8d6c0e1c5c).
+            """)
             
             models_to_train = st.multiselect("Select Models", [
                 "Logistic Regression", "Random Forest", "Decision Tree",
