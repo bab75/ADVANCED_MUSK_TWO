@@ -38,6 +38,7 @@ def initialize_session_state():
         'drop_off_rules': {},
         'high_risk_baselines': None,
         'selected_group_by': None,
+        'training_features': None,  # Store features used during training
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -257,7 +258,7 @@ elif st.session_state.page == "🤖 Model Training":
             
             st.subheader("Feature Selection")
             combined_data = combine_datasets([st.session_state.datasets[ds] for ds in selected_datasets])
-            excluded_features = ["Student_ID"]
+            excluded_features = ["Student_ID", "CA_Prediction", "CA_Probability", "Drop_Off", "Prediction_Causes"]
             available_features = [col for col in combined_data.columns if col not in excluded_features]
             feature_toggles = {f: st.checkbox(f, value=True, key=f"feature_{f}") for f in available_features}
             features = [f for f, enabled in feature_toggles.items() if enabled]
@@ -280,6 +281,29 @@ elif st.session_state.page == "🤖 Model Training":
                     st.error("Please select at least one target.")
             
             st.subheader("Model Selection")
+            with st.expander("Model Selection Guide", expanded=False):
+                st.markdown("""
+                **Model Selection Guide**
+
+                Choose machine learning models to predict chronic absenteeism. Each model has unique strengths:
+
+                - **Logistic Regression**: Models the probability of absenteeism using a linear relationship. Best for interpretable results.
+                  - [Learn More](https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression)
+                - **Random Forest**: Combines multiple decision trees to improve accuracy and handle complex patterns. Robust to overfitting.
+                  - [Learn More](https://scikit-learn.org/stable/modules/ensemble.html#random-forests)
+                - **Decision Tree**: Splits data into branches based on feature values. Easy to interpret but may overfit.
+                  - [Learn More](https://scikit-learn.org/stable/modules/tree.html)
+                - **SVM (Support Vector Machine)**: Finds the optimal boundary to separate classes. Effective for non-linear data.
+                  - [Learn More](https://scikit-learn.org/stable/modules/svm.html)
+                - **Gradient Boosting**: Builds trees sequentially to correct errors. Powerful for predictive accuracy.
+                  - [Learn More](https://scikit-learn.org/stable/modules/ensemble.html#gradient-boosting)
+                - **Neural Network**: Models complex relationships with layered nodes. Suitable for large datasets but requires tuning.
+                  - [Learn More](https://scikit-learn.org/stable/modules/neural_networks_supervised.html)
+
+                Select multiple models to compare their performance. Use hyperparameter tuning for optimized results.
+                For a deeper dive, read [this guide on machine learning models](https://towardsdatascience.com/the-7-most-common-machine-learning-models-8e8d6c0e1c5c).
+                """)
+            
             models_to_train = st.multiselect(
                 "Select Models",
                 ["Logistic Regression", "Random Forest", "Decision Tree", "SVM", "Gradient Boosting", "Neural Network"],
@@ -335,6 +359,7 @@ elif st.session_state.page == "🤖 Model Training":
                         st.session_state.models.update(model_results["models"])
                         st.session_state.model_versions.update(model_results["model_versions"])
                         st.session_state.patterns.extend(patterns)
+                        st.session_state.training_features = features  # Store training features
                         st.success("Models trained successfully!")
                         st.balloons()
                 except Exception as e:
@@ -551,6 +576,10 @@ elif st.session_state.page == "📊 Results":
         available_features = [col for col in st.session_state.current_data.columns if col not in excluded_columns]
         feature_toggles = {f: st.checkbox(f, value=True, key=f"predict_feature_{f}") for f in available_features}
         features = [f for f, enabled in feature_toggles.items() if enabled]
+        
+        # Warn if prediction features differ from training features
+        if st.session_state.training_features and set(features) != set(st.session_state.training_features):
+            st.warning("Prediction features differ from training features. This may cause errors. Ensure the same features are selected as during training.")
         
         group_by_options = [col for col in available_features if st.session_state.current_data[col].dtype == "object" or col == "Grade"]
         group_by_options += [f["name"] for f in st.session_state.current_custom_fields if f["name"] in st.session_state.current_data.columns]
