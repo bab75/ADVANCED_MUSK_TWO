@@ -32,37 +32,50 @@ def compute_high_risk_baselines(data):
         return {}
 
 def preprocess_data(data, features, targets):
-    """Preprocess data for training or prediction."""
+    """Preprocess data for training or prediction, handling all data types."""
     try:
         # Ensure data is a DataFrame
         data = pd.DataFrame(data)
         
+        # Define columns to exclude from processing (identifiers)
+        exclude_cols = ["Student_ID", "School"]
+        
         # Handle missing values
-        data = data.fillna(data.select_dtypes(include=[np.number]).mean())
-        data = data.fillna(data.select_dtypes(exclude=[np.number]).mode().iloc[0])
+        for col in data.columns:
+            if col in data.select_dtypes(include=[np.number]).columns:
+                data[col] = data[col].fillna(data[col].mean())
+            else:
+                data[col] = data[col].fillna(data[col].mode().iloc[0] if not data[col].mode().empty else "Unknown")
         
         # Initialize X and y
         X = data[features].copy() if features else pd.DataFrame()
         y = pd.DataFrame()
         
+        # Identify categorical and numerical columns
+        categorical_cols = [col for col in X.columns if X[col].dtype == "object" or X[col].dtype.name == "category" or col in exclude_cols]
+        numerical_cols = [col for col in X.columns if col not in categorical_cols]
+        
         # Encode categorical features
-        for col in X.columns:
-            if X[col].dtype == "object" or X[col].dtype.name == "category":
+        label_encoders = {}
+        for col in categorical_cols:
+            if col in X.columns:
                 try:
                     le = LabelEncoder()
                     X[col] = le.fit_transform(X[col].astype(str))
+                    label_encoders[col] = le
                 except Exception as e:
                     st.warning(f"Error encoding feature {col}: {str(e)}")
                     X[col] = 0
         
         # Scale numerical features
         scaler = StandardScaler()
-        numeric_cols = X.select_dtypes(include=[np.number]).columns
-        if len(numeric_cols) > 0:
+        if numerical_cols:
             try:
-                X[numeric_cols] = scaler.fit_transform(X[numeric_cols])
+                X[numerical_cols] = scaler.fit_transform(X[numerical_cols])
             except Exception as e:
                 st.warning(f"Error scaling numerical features: {str(e)}")
+                # If scaling fails, fill with zeros to prevent crash
+                X[numerical_cols] = 0
         
         # Process targets
         if targets:
