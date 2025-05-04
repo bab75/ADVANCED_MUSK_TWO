@@ -333,7 +333,7 @@ elif st.session_state.page == "🤖 Model Training":
                                 model, metrics = train_model(model_name, X_train_processed, y_train, X_test_processed, y_test)
                                 best_params = None
                             
-                            # Store y_test and y_pred for confusion matrix
+                            # Store y_test, y_pred, and X_test_processed
                             y_pred = model.predict(X_test_processed)
                             metrics['y_pred'] = y_pred
                             
@@ -348,7 +348,8 @@ elif st.session_state.page == "🤖 Model Training":
                                 "preprocessor": preprocessor,
                                 "feature_names": feature_names,
                                 "y_test": y_test,
-                                "y_pred": y_pred
+                                "y_pred": y_pred,
+                                "X_test_processed": X_test_processed
                             })
                             
                             st.session_state.models[model_name] = {
@@ -358,7 +359,8 @@ elif st.session_state.page == "🤖 Model Training":
                                 "feature_names": feature_names,
                                 "best_params": best_params,
                                 "y_test": y_test,
-                                "y_pred": y_pred
+                                "y_pred": y_pred,
+                                "X_test_processed": X_test_processed
                             }
                             
                             comparison_data.append({
@@ -421,7 +423,6 @@ elif st.session_state.page == "🤖 Model Training":
                             st.write("Best Parameters:")
                             st.json(model_info["best_params"])
                     with col2:
-                        # Use stored y_test and y_pred
                         fig = plot_confusion_matrix(model_info["y_test"], model_info["y_pred"])
                         fig.update_traces(hovertemplate="Predicted: %{x}<br>Actual: %{y}<br>Count: %{z}")
                         fig.update_layout(width=600, height=400, margin=dict(l=50, r=50, t=50, b=50))
@@ -434,7 +435,7 @@ elif st.session_state.page == "🤖 Model Training":
                             fig.update_layout(width=600, height=400, margin=dict(l=50, r=50, t=50, b=50))
                             st.plotly_chart(fig, use_container_width=False)
                     
-                    st.write(get_model_explanation(model_name, X_test_processed[:1], model_info["model"]))
+                    st.write(get_model_explanation(model_name, model_info["X_test_processed"][:1], model_info["model"]))
         
         with st.expander("Model Comparison"):
             st.subheader("Model Selection & Versioning Dashboard")
@@ -642,7 +643,7 @@ elif st.session_state.page == "📊 Results":
                     if "Student_ID" in st.session_state.current_data.columns and st.session_state.data is not None:
                         historical_data = st.session_state.data[["Student_ID", "Attendance_Percentage", "Academic_Performance", "Suspensions"]]
                         st.session_state.current_data = st.session_state.current_data.merge(
-                            historical_data, on="Student_ID", how="left", suffixes=("", "_Historical")
+                            historical_data, on="Student_ID", on="Student_ID", how="left", suffixes=("", "_Historical")
                         )
                     
                     st.subheader("Prediction Results")
